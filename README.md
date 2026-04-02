@@ -1,6 +1,25 @@
 # W3 PayPal Action
 
-Complete PayPal API for W3 workflows. 88 commands covering orders, payments, payouts, subscriptions, invoicing, disputes, vault, catalog products, reporting, webhooks, and identity.
+PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and reporting for W3 workflows.
+
+## Quick Start
+
+```yaml
+- uses: w3/paypal@v1
+  id: order
+  with:
+    command: create-order
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: |
+      {
+        "intent": "CAPTURE",
+        "purchase_units": [{
+          "amount": {"currency_code": "USD", "value": "99.99"},
+          "description": "Premium Plan"
+        }]
+      }
+```
 
 ## Commands
 
@@ -38,7 +57,7 @@ Complete PayPal API for W3 workflows. 88 commands covering orders, payments, pay
 | `get-payout-item` | Get individual payout item |
 | `cancel-payout-item` | Cancel unclaimed payout |
 
-### Subscriptions — Plans (7)
+### Subscriptions -- Plans (7)
 
 | Command | Description |
 |---------|-------------|
@@ -50,7 +69,7 @@ Complete PayPal API for W3 workflows. 88 commands covering orders, payments, pay
 | `deactivate-plan` | Deactivate a plan |
 | `update-plan-pricing` | Update pricing schemes |
 
-### Subscriptions — Subscriptions (9)
+### Subscriptions -- Subscriptions (9)
 
 | Command | Description |
 |---------|-------------|
@@ -114,7 +133,7 @@ Complete PayPal API for W3 workflows. 88 commands covering orders, payments, pay
 | `get-payment-token` | Get payment token |
 | `delete-payment-token` | Delete payment token |
 
-### Catalog Products (4)
+### Products (4)
 
 | Command | Description |
 |---------|-------------|
@@ -152,121 +171,61 @@ Complete PayPal API for W3 workflows. 88 commands covering orders, payments, pay
 |---------|-------------|
 | `get-userinfo` | Get PayPal user profile |
 
-## Usage
+## Inputs
 
-### Accept a Payment
+| Name | Required | Default | Description |
+|------|----------|---------|-------------|
+| `command` | Yes | | Operation to perform (88 commands) |
+| `client-id` | Yes | | PayPal OAuth2 Client ID |
+| `client-secret` | Yes | | PayPal OAuth2 Client Secret |
+| `api-url` | No | `https://api-m.sandbox.paypal.com` | PayPal API base URL |
+| `body` | No | | Request body as JSON |
+| `order-id` | No | | Order ID |
+| `authorization-id` | No | | Authorization ID |
+| `capture-id` | No | | Capture ID |
+| `refund-id` | No | | Refund ID |
+| `payout-id` | No | | Batch payout ID |
+| `item-id` | No | | Payout item ID |
+| `plan-id` | No | | Billing plan ID |
+| `subscription-id` | No | | Subscription ID |
+| `invoice-id` | No | | Invoice ID |
+| `template-id` | No | | Invoice template ID |
+| `dispute-id` | No | | Dispute ID |
+| `token-id` | No | | Vault setup or payment token ID |
+| `product-id` | No | | Catalog product ID |
+| `tracker-id` | No | | Shipment tracker ID |
+| `webhook-id` | No | | Webhook ID |
+| `event-id` | No | | Webhook event ID |
+| `transaction-id` | No | | Transaction ID (for reporting) |
+| `payment-id` | No | | Recorded payment ID (for invoice) |
+| `customer-id` | No | | Customer ID (for vault) |
+| `start-date` | No | | Start date (ISO 8601) |
+| `end-date` | No | | End date (ISO 8601) |
+| `status` | No | | Status filter |
+| `page` | No | | Page number |
+| `page-size` | No | | Page size |
+| `total-required` | No | | Include total count in response |
+| `fields` | No | | Fields filter (for reporting) |
+| `currency-code` | No | | Currency code filter |
+| `balance-date` | No | | Balance as-of date (ISO 8601) |
+| `transaction-type` | No | | Transaction type filter |
+| `transaction-status` | No | | Transaction status filter |
+| `transaction-amount` | No | | Transaction amount filter |
+| `event-type` | No | | Webhook event type filter |
 
-```yaml
-- uses: w3/paypal@v1
-  id: order
-  with:
-    command: create-order
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: |
-      {
-        "intent": "CAPTURE",
-        "purchase_units": [{
-          "amount": {"currency_code": "USD", "value": "99.99"},
-          "description": "Premium Plan"
-        }]
-      }
-```
+## Outputs
 
-### Send a Payout
-
-```yaml
-- uses: w3/paypal@v1
-  with:
-    command: create-payout
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: |
-      {
-        "sender_batch_header": {
-          "sender_batch_id": "batch-${{ github.run_id }}",
-          "email_subject": "You have a payment"
-        },
-        "items": [{
-          "recipient_type": "EMAIL",
-          "amount": {"value": "50.00", "currency": "USD"},
-          "receiver": "recipient@example.com"
-        }]
-      }
-```
-
-### Create and Send an Invoice
-
-```yaml
-- uses: w3/paypal@v1
-  id: invoice
-  with:
-    command: create-invoice
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: |
-      {
-        "detail": {
-          "currency_code": "USD",
-          "invoice_number": "INV-001",
-          "payment_term": {"term_type": "NET_30"}
-        },
-        "primary_recipients": [{"billing_info": {"email_address": "client@example.com"}}],
-        "items": [{"name": "Consulting", "quantity": "10", "unit_amount": {"currency_code": "USD", "value": "150.00"}}]
-      }
-
-- uses: w3/paypal@v1
-  with:
-    command: send-invoice
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    invoice-id: INV2-XXXX-XXXX-XXXX-XXXX
-```
-
-### Recurring Subscription
-
-```yaml
-# Create a product
-- uses: w3/paypal@v1
-  id: product
-  with:
-    command: create-product
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: '{"name": "SaaS Platform", "type": "SERVICE"}'
-
-# Create a billing plan
-- uses: w3/paypal@v1
-  id: plan
-  with:
-    command: create-plan
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: |
-      {
-        "product_id": "${{ fromJson(steps.product.outputs.result).id }}",
-        "name": "Monthly Pro",
-        "billing_cycles": [{
-          "frequency": {"interval_unit": "MONTH", "interval_count": 1},
-          "tenure_type": "REGULAR",
-          "sequence": 1,
-          "pricing_scheme": {"fixed_price": {"value": "29.99", "currency_code": "USD"}}
-        }],
-        "payment_preferences": {"auto_bill_outstanding": true}
-      }
-```
+| Name | Description |
+|------|-------------|
+| `result` | Command result as JSON string |
 
 ## Authentication
 
 PayPal uses OAuth2. The action automatically exchanges your Client ID and Secret for a Bearer token on each invocation. Get credentials at https://developer.paypal.com/developer/applications.
-
-## Environments
 
 | Environment | URL |
 |-------------|-----|
 | Sandbox | `https://api-m.sandbox.paypal.com` (default) |
 | Production | `https://api-m.paypal.com` |
 
-## PYUSD Note
-
-PayPal's PYUSD stablecoin is a standard ERC-20 (Ethereum) and SPL (Solana) token. There is no PayPal REST API for PYUSD — interact with it using the W3 bridge SDK's Ethereum or Solana syscalls (`get-balance`, `transfer`, `read-contract`).
+PYUSD (PayPal's stablecoin) is a standard ERC-20 (Ethereum) and SPL (Solana) token. There is no PayPal REST API for PYUSD -- interact with it using the W3 bridge SDK's Ethereum or Solana syscalls.
