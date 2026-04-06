@@ -1,683 +1,161 @@
-import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
+/**
+ * W3 PayPal Action — 91 commands across 12 categories.
+ *
+ * Orders, payments, payouts, subscriptions, invoicing, disputes,
+ * vault, catalog products, reporting, webhooks, crypto onramp,
+ * and identity.
+ */
+
+import { createCommandRouter, setJsonOutput } from '@w3-io/action-core'
 import * as core from '@actions/core'
+import { PayPalClient } from './client.js'
 
-// -- Shared helpers -----------------------------------------------------------
-
-async function getAccessToken(apiUrl, clientId, clientSecret) {
-  const tokenRes = await fetch(`${apiUrl}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization:
-        'Basic ' +
-        Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
+function getClient() {
+  return new PayPalClient({
+    clientId: core.getInput('client-id', { required: true }),
+    clientSecret: core.getInput('client-secret', { required: true }),
+    baseUrl: core.getInput('api-url') || undefined,
   })
-  const tokenData = await tokenRes.json()
-  if (!tokenData.access_token) {
-    throw new Error(
-      `OAuth failed: ${tokenData.error_description || JSON.stringify(tokenData)}`,
-    )
+}
+
+function jsonInput(name) {
+  const raw = core.getInput(name)
+  if (!raw) return undefined
+  try { return JSON.parse(raw) } catch { return raw }
+}
+
+function body() { return jsonInput('body') }
+function req(name) { return core.getInput(name, { required: true }) }
+function opt(name) { return core.getInput(name) || undefined }
+
+function query(...names) {
+  const q = {}
+  for (const name of names) {
+    const v = core.getInput(name)
+    if (v) q[name.replace(/-/g, '_')] = v
   }
-  return tokenData.access_token
+  return Object.keys(q).length ? q : undefined
 }
-
-function makeRequest(apiUrl, headers) {
-  return async function request(method, path, bodyObj, extraHeaders) {
-    const url = `${apiUrl}${path}`
-    const opts = { method, headers: { ...headers, ...extraHeaders } }
-    if (
-      bodyObj &&
-      (method === 'POST' || method === 'PUT' || method === 'PATCH')
-    ) {
-      opts.body = JSON.stringify(bodyObj)
-    }
-    const res = await fetch(url, opts)
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    let data
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = text
-    }
-    if (!res.ok) {
-      const msg = typeof data === 'object' ? JSON.stringify(data) : data
-      throw new Error(`${method} ${path} returned ${res.status}: ${msg}`)
-    }
-    return data
-  }
-}
-
-function qs(params) {
-  const entries = Object.entries(params).filter(([, v]) => v !== '')
-  return entries.length
-    ? '?' + entries.map(([k, v]) => `${k}=${v}`).join('&')
-    : ''
-}
-
-function parseBody() {
-  const body = core.getInput('body') || ''
-  if (!body) throw new Error('body input is required for this command')
-  return JSON.parse(body)
-}
-
-async function setup() {
-  const clientId = core.getInput('client-id', { required: true })
-  const clientSecret = core.getInput('client-secret', { required: true })
-  const apiUrl = core.getInput('api-url') || 'https://api-m.sandbox.paypal.com'
-
-  const token = await getAccessToken(apiUrl, clientId, clientSecret)
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-  return makeRequest(apiUrl, headers)
-}
-
-function handler(fn) {
-  return async () => {
-    const request = await setup()
-    const result = await fn(request)
-    setJsonOutput('result', result)
-  }
-}
-
-// -- Router -------------------------------------------------------------------
 
 const router = createCommandRouter({
-  // =================================================================
-  // ORDERS
-  // =================================================================
-
-  'create-order': handler(async (request) => {
-    return request('POST', '/v2/checkout/orders', parseBody())
-  }),
-
-  'get-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('GET', `/v2/checkout/orders/${orderId}`)
-  }),
-
-  'update-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('PATCH', `/v2/checkout/orders/${orderId}`, parseBody())
-  }),
-
-  'authorize-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    const body = core.getInput('body') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/authorize`, body ? JSON.parse(body) : {})
-  }),
-
-  'capture-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    const body = core.getInput('body') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/capture`, body ? JSON.parse(body) : {})
-  }),
-
-  'confirm-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/confirm-payment-source`, parseBody())
-  }),
-
-  'track-order': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/track`, parseBody())
-  }),
-
-  'update-order-tracking': handler(async (request) => {
-    const orderId = core.getInput('order-id') || ''
-    const trackerId = core.getInput('tracker-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    if (!trackerId) throw new Error('tracker-id is required')
-    return request('PATCH', `/v2/checkout/orders/${orderId}/trackers/${trackerId}`, parseBody())
-  }),
-
-  // =================================================================
-  // PAYMENTS (post-order lifecycle)
-  // =================================================================
-
-  'get-authorization': handler(async (request) => {
-    const authorizationId = core.getInput('authorization-id') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('GET', `/v2/payments/authorizations/${authorizationId}`)
-  }),
-
-  'capture-authorization': handler(async (request) => {
-    const authorizationId = core.getInput('authorization-id') || ''
-    const body = core.getInput('body') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/capture`, body ? JSON.parse(body) : {})
-  }),
-
-  reauthorize: handler(async (request) => {
-    const authorizationId = core.getInput('authorization-id') || ''
-    const body = core.getInput('body') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/reauthorize`, body ? JSON.parse(body) : {})
-  }),
-
-  'void-authorization': handler(async (request) => {
-    const authorizationId = core.getInput('authorization-id') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/void`)
-  }),
-
-  'get-capture': handler(async (request) => {
-    const captureId = core.getInput('capture-id') || ''
-    if (!captureId) throw new Error('capture-id is required')
-    return request('GET', `/v2/payments/captures/${captureId}`)
-  }),
-
-  'refund-capture': handler(async (request) => {
-    const captureId = core.getInput('capture-id') || ''
-    const body = core.getInput('body') || ''
-    if (!captureId) throw new Error('capture-id is required')
-    return request('POST', `/v2/payments/captures/${captureId}/refund`, body ? JSON.parse(body) : {})
-  }),
-
-  'get-refund': handler(async (request) => {
-    const refundId = core.getInput('refund-id') || ''
-    if (!refundId) throw new Error('refund-id is required')
-    return request('GET', `/v2/payments/refunds/${refundId}`)
-  }),
-
-  // =================================================================
-  // PAYOUTS
-  // =================================================================
-
-  'create-payout': handler(async (request) => {
-    return request('POST', '/v1/payments/payouts', parseBody())
-  }),
-
-  'get-payout': handler(async (request) => {
-    const payoutId = core.getInput('payout-id') || ''
-    if (!payoutId) throw new Error('payout-id is required')
-    return request('GET', `/v1/payments/payouts/${payoutId}`)
-  }),
-
-  'get-payout-item': handler(async (request) => {
-    const itemId = core.getInput('item-id') || ''
-    if (!itemId) throw new Error('item-id is required')
-    return request('GET', `/v1/payments/payouts-item/${itemId}`)
-  }),
-
-  'cancel-payout-item': handler(async (request) => {
-    const itemId = core.getInput('item-id') || ''
-    if (!itemId) throw new Error('item-id is required')
-    return request('POST', `/v1/payments/payouts-item/${itemId}/cancel`)
-  }),
-
-  // =================================================================
-  // SUBSCRIPTIONS -- Plans
-  // =================================================================
-
-  'create-plan': handler(async (request) => {
-    return request('POST', '/v1/billing/plans', parseBody())
-  }),
-
-  'list-plans': handler(async (request) => {
-    const pageSize = core.getInput('page-size') || ''
-    const page = core.getInput('page') || ''
-    const totalRequired = core.getInput('total-required') || ''
-    return request('GET', `/v1/billing/plans${qs({ page_size: pageSize, page, total_required: totalRequired })}`)
-  }),
-
-  'get-plan': handler(async (request) => {
-    const planId = core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('GET', `/v1/billing/plans/${planId}`)
-  }),
-
-  'update-plan': handler(async (request) => {
-    const planId = core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('PATCH', `/v1/billing/plans/${planId}`, parseBody())
-  }),
-
-  'activate-plan': handler(async (request) => {
-    const planId = core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/activate`)
-  }),
-
-  'deactivate-plan': handler(async (request) => {
-    const planId = core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/deactivate`)
-  }),
-
-  'update-plan-pricing': handler(async (request) => {
-    const planId = core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/update-pricing-schemes`, parseBody())
-  }),
-
-  // =================================================================
-  // SUBSCRIPTIONS -- Subscriptions
-  // =================================================================
-
-  'create-subscription': handler(async (request) => {
-    return request('POST', '/v1/billing/subscriptions', parseBody())
-  }),
-
-  'get-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('GET', `/v1/billing/subscriptions/${subscriptionId}`)
-  }),
-
-  'update-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('PATCH', `/v1/billing/subscriptions/${subscriptionId}`, parseBody())
-  }),
-
-  'revise-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/revise`, parseBody())
-  }),
-
-  'suspend-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    const body = core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/suspend`, body ? JSON.parse(body) : { reason: 'Suspended via W3 workflow' })
-  }),
-
-  'cancel-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    const body = core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/cancel`, body ? JSON.parse(body) : { reason: 'Cancelled via W3 workflow' })
-  }),
-
-  'activate-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    const body = core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/activate`, body ? JSON.parse(body) : { reason: 'Reactivated via W3 workflow' })
-  }),
-
-  'capture-subscription': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/capture`, parseBody())
-  }),
-
-  'list-subscription-transactions': handler(async (request) => {
-    const subscriptionId = core.getInput('subscription-id') || ''
-    const startDate = core.getInput('start-date') || ''
-    const endDate = core.getInput('end-date') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('GET', `/v1/billing/subscriptions/${subscriptionId}/transactions${qs({ start_time: startDate, end_time: endDate })}`)
-  }),
-
-  // =================================================================
-  // INVOICING
-  // =================================================================
-
-  'create-invoice': handler(async (request) => {
-    return request('POST', '/v2/invoicing/invoices', parseBody())
-  }),
-
-  'list-invoices': handler(async (request) => {
-    const page = core.getInput('page') || ''
-    const pageSize = core.getInput('page-size') || ''
-    const totalRequired = core.getInput('total-required') || ''
-    const fields = core.getInput('fields') || ''
-    return request('GET', `/v2/invoicing/invoices${qs({ page, page_size: pageSize, total_required: totalRequired, fields })}`)
-  }),
-
-  'get-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('GET', `/v2/invoicing/invoices/${invoiceId}`)
-  }),
-
-  'update-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('PUT', `/v2/invoicing/invoices/${invoiceId}`, parseBody())
-  }),
-
-  'delete-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('DELETE', `/v2/invoicing/invoices/${invoiceId}`)
-  }),
-
-  'send-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    const body = core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/send`, body ? JSON.parse(body) : {})
-  }),
-
-  'remind-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    const body = core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/remind`, body ? JSON.parse(body) : {})
-  }),
-
-  'cancel-invoice': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    const body = core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/cancel`, body ? JSON.parse(body) : {})
-  }),
-
-  'record-invoice-payment': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/payments`, parseBody())
-  }),
-
-  'delete-invoice-payment': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    const paymentId = core.getInput('payment-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    if (!paymentId) throw new Error('payment-id is required')
-    return request('DELETE', `/v2/invoicing/invoices/${invoiceId}/payments/${paymentId}`)
-  }),
-
-  'record-invoice-refund': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/refunds`, parseBody())
-  }),
-
-  'generate-invoice-qr': handler(async (request) => {
-    const invoiceId = core.getInput('invoice-id') || ''
-    const body = core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/generate-qr-code`, body ? JSON.parse(body) : { width: 400, height: 400 })
-  }),
-
-  'generate-invoice-number': handler(async (request) => {
-    return request('POST', '/v2/invoicing/generate-next-invoice-number', {})
-  }),
-
-  'search-invoices': handler(async (request) => {
-    return request('POST', '/v2/invoicing/search-invoices', parseBody())
-  }),
-
-  // Invoice templates
-  'list-invoice-templates': handler(async (request) => {
-    const page = core.getInput('page') || ''
-    const pageSize = core.getInput('page-size') || ''
-    const fields = core.getInput('fields') || ''
-    return request('GET', `/v2/invoicing/templates${qs({ page, page_size: pageSize, fields })}`)
-  }),
-
-  'create-invoice-template': handler(async (request) => {
-    return request('POST', '/v2/invoicing/templates', parseBody())
-  }),
-
-  'get-invoice-template': handler(async (request) => {
-    const templateId = core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('GET', `/v2/invoicing/templates/${templateId}`)
-  }),
-
-  'update-invoice-template': handler(async (request) => {
-    const templateId = core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('PUT', `/v2/invoicing/templates/${templateId}`, parseBody())
-  }),
-
-  'delete-invoice-template': handler(async (request) => {
-    const templateId = core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('DELETE', `/v2/invoicing/templates/${templateId}`)
-  }),
-
-  // =================================================================
-  // DISPUTES
-  // =================================================================
-
-  'list-disputes': handler(async (request) => {
-    const startDate = core.getInput('start-date') || ''
-    const status = core.getInput('status') || ''
-    const pageSize = core.getInput('page-size') || ''
-    return request('GET', `/v1/customer/disputes${qs({ start_time: startDate, dispute_state: status, page_size: pageSize })}`)
-  }),
-
-  'get-dispute': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('GET', `/v1/customer/disputes/${disputeId}`)
-  }),
-
-  'accept-dispute-claim': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    const body = core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/accept-claim`, body ? JSON.parse(body) : {})
-  }),
-
-  'escalate-dispute': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    const body = core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/escalate`, body ? JSON.parse(body) : { note: 'Escalated via W3 workflow' })
-  }),
-
-  'provide-dispute-evidence': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/provide-evidence`, parseBody())
-  }),
-
-  'appeal-dispute': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/appeal`, parseBody())
-  }),
-
-  'send-dispute-message': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/send-message`, parseBody())
-  }),
-
-  'make-dispute-offer': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/make-offer`, parseBody())
-  }),
-
-  'accept-dispute-offer': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    const body = core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/accept-offer`, body ? JSON.parse(body) : {})
-  }),
-
-  'deny-dispute-offer': handler(async (request) => {
-    const disputeId = core.getInput('dispute-id') || ''
-    const body = core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/deny-offer`, body ? JSON.parse(body) : {})
-  }),
-
-  // =================================================================
-  // VAULT / PAYMENT TOKENS
-  // =================================================================
-
-  'create-setup-token': handler(async (request) => {
-    return request('POST', '/v3/vault/setup-tokens', parseBody())
-  }),
-
-  'get-setup-token': handler(async (request) => {
-    const tokenId = core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('GET', `/v3/vault/setup-tokens/${tokenId}`)
-  }),
-
-  'create-payment-token': handler(async (request) => {
-    return request('POST', '/v3/vault/payment-tokens', parseBody())
-  }),
-
-  'list-payment-tokens': handler(async (request) => {
-    return request('GET', `/v3/vault/payment-tokens${qs({ customer_id: core.getInput('customer-id') || '' })}`)
-  }),
-
-  'get-payment-token': handler(async (request) => {
-    const tokenId = core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('GET', `/v3/vault/payment-tokens/${tokenId}`)
-  }),
-
-  'delete-payment-token': handler(async (request) => {
-    const tokenId = core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('DELETE', `/v3/vault/payment-tokens/${tokenId}`)
-  }),
-
-  // =================================================================
-  // CATALOG PRODUCTS
-  // =================================================================
-
-  'create-product': handler(async (request) => {
-    return request('POST', '/v1/catalogs/products', parseBody())
-  }),
-
-  'list-products': handler(async (request) => {
-    const pageSize = core.getInput('page-size') || ''
-    const page = core.getInput('page') || ''
-    const totalRequired = core.getInput('total-required') || ''
-    return request('GET', `/v1/catalogs/products${qs({ page_size: pageSize, page, total_required: totalRequired })}`)
-  }),
-
-  'get-product': handler(async (request) => {
-    const productId = core.getInput('product-id') || ''
-    if (!productId) throw new Error('product-id is required')
-    return request('GET', `/v1/catalogs/products/${productId}`)
-  }),
-
-  'update-product': handler(async (request) => {
-    const productId = core.getInput('product-id') || ''
-    if (!productId) throw new Error('product-id is required')
-    return request('PATCH', `/v1/catalogs/products/${productId}`, parseBody())
-  }),
-
-  // =================================================================
-  // REPORTING
-  // =================================================================
-
-  'search-transactions': handler(async (request) => {
-    const startDate = core.getInput('start-date') || ''
-    const endDate = core.getInput('end-date') || ''
-    const transactionId = core.getInput('transaction-id') || ''
-    const transactionType = core.getInput('transaction-type') || ''
-    const transactionStatus = core.getInput('transaction-status') || ''
-    const transactionAmount = core.getInput('transaction-amount') || ''
-    const currencyCode = core.getInput('currency-code') || ''
-    const pageSize = core.getInput('page-size') || ''
-    const page = core.getInput('page') || ''
-    const fields = core.getInput('fields') || ''
-    return request('GET', `/v1/reporting/transactions${qs({
-      start_date: startDate,
-      end_date: endDate,
-      transaction_id: transactionId,
-      transaction_type: transactionType,
-      transaction_status: transactionStatus,
-      transaction_amount: transactionAmount,
-      currency_code: currencyCode,
-      page_size: pageSize,
-      page,
-      fields,
-    })}`)
-  }),
-
-  'get-balances': handler(async (request) => {
-    const balanceDate = core.getInput('balance-date') || ''
-    const currencyCode = core.getInput('currency-code') || ''
-    return request('GET', `/v1/reporting/balances${qs({ as_of_time: balanceDate, currency_code: currencyCode })}`)
-  }),
-
-  // =================================================================
-  // WEBHOOKS
-  // =================================================================
-
-  'create-webhook': handler(async (request) => {
-    return request('POST', '/v1/notifications/webhooks', parseBody())
-  }),
-
-  'list-webhooks': handler(async (request) => {
-    return request('GET', '/v1/notifications/webhooks')
-  }),
-
-  'get-webhook': handler(async (request) => {
-    const webhookId = core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('GET', `/v1/notifications/webhooks/${webhookId}`)
-  }),
-
-  'update-webhook': handler(async (request) => {
-    const webhookId = core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('PATCH', `/v1/notifications/webhooks/${webhookId}`, parseBody())
-  }),
-
-  'delete-webhook': handler(async (request) => {
-    const webhookId = core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('DELETE', `/v1/notifications/webhooks/${webhookId}`)
-  }),
-
-  'list-webhook-event-types': handler(async (request) => {
-    return request('GET', '/v1/notifications/webhooks-event-types')
-  }),
-
-  'list-webhook-events': handler(async (request) => {
-    const startDate = core.getInput('start-date') || ''
-    const endDate = core.getInput('end-date') || ''
-    const pageSize = core.getInput('page-size') || ''
-    const eventType = core.getInput('event-type') || ''
-    return request('GET', `/v1/notifications/webhooks-events${qs({ start_time: startDate, end_time: endDate, page_size: pageSize, event_type: eventType })}`)
-  }),
-
-  'get-webhook-event': handler(async (request) => {
-    const eventId = core.getInput('event-id') || ''
-    if (!eventId) throw new Error('event-id is required')
-    return request('GET', `/v1/notifications/webhooks-events/${eventId}`)
-  }),
-
-  'resend-webhook-event': handler(async (request) => {
-    const eventId = core.getInput('event-id') || ''
-    const body = core.getInput('body') || ''
-    if (!eventId) throw new Error('event-id is required')
-    return request('POST', `/v1/notifications/webhooks-events/${eventId}/resend`, body ? JSON.parse(body) : {})
-  }),
-
-  'simulate-webhook-event': handler(async (request) => {
-    return request('POST', '/v1/notifications/simulate-event', parseBody())
-  }),
-
-  'verify-webhook-signature': handler(async (request) => {
-    return request('POST', '/v1/notifications/verify-webhook-signature', parseBody())
-  }),
-
-  // =================================================================
-  // IDENTITY
-  // =================================================================
-
-  'get-userinfo': handler(async (request) => {
-    return request('GET', '/v1/identity/oauth2/userinfo?schema=openid')
-  }),
+  // ── Orders ──────────────────────────────────────────────────────────
+  'create-order': async () => setJsonOutput('result', await getClient().createOrder(body())),
+  'get-order': async () => setJsonOutput('result', await getClient().getOrder(req('order-id'))),
+  'update-order': async () => setJsonOutput('result', await getClient().updateOrder(req('order-id'), body())),
+  'authorize-order': async () => setJsonOutput('result', await getClient().authorizeOrder(req('order-id'), body())),
+  'capture-order': async () => setJsonOutput('result', await getClient().captureOrder(req('order-id'), body())),
+  'confirm-order': async () => setJsonOutput('result', await getClient().confirmOrder(req('order-id'), body())),
+  'track-order': async () => setJsonOutput('result', await getClient().trackOrder(req('order-id'), body())),
+  'update-order-tracking': async () => setJsonOutput('result', await getClient().updateOrderTracking(req('order-id'), req('tracker-id'), body())),
+
+  // ── Payments ────────────────────────────────────────────────────────
+  'get-authorization': async () => setJsonOutput('result', await getClient().getAuthorization(req('authorization-id'))),
+  'capture-authorization': async () => setJsonOutput('result', await getClient().captureAuthorization(req('authorization-id'), body())),
+  'reauthorize': async () => setJsonOutput('result', await getClient().reauthorize(req('authorization-id'), body())),
+  'void-authorization': async () => setJsonOutput('result', await getClient().voidAuthorization(req('authorization-id'))),
+  'get-capture': async () => setJsonOutput('result', await getClient().getCapture(req('capture-id'))),
+  'refund-capture': async () => setJsonOutput('result', await getClient().refundCapture(req('capture-id'), body())),
+  'get-refund': async () => setJsonOutput('result', await getClient().getRefund(req('refund-id'))),
+
+  // ── Payouts ─────────────────────────────────────────────────────────
+  'create-payout': async () => setJsonOutput('result', await getClient().createPayout(body())),
+  'get-payout': async () => setJsonOutput('result', await getClient().getPayout(req('payout-id'))),
+  'get-payout-item': async () => setJsonOutput('result', await getClient().getPayoutItem(req('item-id'))),
+  'cancel-payout-item': async () => setJsonOutput('result', await getClient().cancelPayoutItem(req('item-id'))),
+
+  // ── Billing Plans ───────────────────────────────────────────────────
+  'create-plan': async () => setJsonOutput('result', await getClient().createPlan(body())),
+  'list-plans': async () => setJsonOutput('result', await getClient().listPlans(query('page-size', 'page', 'total-required'))),
+  'get-plan': async () => setJsonOutput('result', await getClient().getPlan(req('plan-id'))),
+  'update-plan': async () => setJsonOutput('result', await getClient().updatePlan(req('plan-id'), body())),
+  'activate-plan': async () => setJsonOutput('result', await getClient().activatePlan(req('plan-id'))),
+  'deactivate-plan': async () => setJsonOutput('result', await getClient().deactivatePlan(req('plan-id'))),
+  'update-plan-pricing': async () => setJsonOutput('result', await getClient().updatePlanPricing(req('plan-id'), body())),
+
+  // ── Subscriptions ───────────────────────────────────────────────────
+  'create-subscription': async () => setJsonOutput('result', await getClient().createSubscription(body())),
+  'get-subscription': async () => setJsonOutput('result', await getClient().getSubscription(req('subscription-id'))),
+  'update-subscription': async () => setJsonOutput('result', await getClient().updateSubscription(req('subscription-id'), body())),
+  'revise-subscription': async () => setJsonOutput('result', await getClient().reviseSubscription(req('subscription-id'), body())),
+  'suspend-subscription': async () => setJsonOutput('result', await getClient().suspendSubscription(req('subscription-id'), body())),
+  'cancel-subscription': async () => setJsonOutput('result', await getClient().cancelSubscription(req('subscription-id'), body())),
+  'activate-subscription': async () => setJsonOutput('result', await getClient().activateSubscription(req('subscription-id'), body())),
+  'capture-subscription': async () => setJsonOutput('result', await getClient().captureSubscription(req('subscription-id'), body())),
+  'list-subscription-transactions': async () => setJsonOutput('result', await getClient().listSubscriptionTransactions(req('subscription-id'), query('start-date', 'end-date'))),
+
+  // ── Invoicing ───────────────────────────────────────────────────────
+  'create-invoice': async () => setJsonOutput('result', await getClient().createInvoice(body())),
+  'list-invoices': async () => setJsonOutput('result', await getClient().listInvoices(query('page', 'page-size', 'total-required', 'fields'))),
+  'get-invoice': async () => setJsonOutput('result', await getClient().getInvoice(req('invoice-id'))),
+  'update-invoice': async () => setJsonOutput('result', await getClient().updateInvoice(req('invoice-id'), body())),
+  'delete-invoice': async () => setJsonOutput('result', await getClient().deleteInvoice(req('invoice-id'))),
+  'send-invoice': async () => setJsonOutput('result', await getClient().sendInvoice(req('invoice-id'), body())),
+  'remind-invoice': async () => setJsonOutput('result', await getClient().remindInvoice(req('invoice-id'), body())),
+  'cancel-invoice': async () => setJsonOutput('result', await getClient().cancelInvoice(req('invoice-id'), body())),
+  'record-invoice-payment': async () => setJsonOutput('result', await getClient().recordInvoicePayment(req('invoice-id'), body())),
+  'delete-invoice-payment': async () => setJsonOutput('result', await getClient().deleteInvoicePayment(req('invoice-id'), req('payment-id'))),
+  'record-invoice-refund': async () => setJsonOutput('result', await getClient().recordInvoiceRefund(req('invoice-id'), body())),
+  'generate-invoice-qr': async () => setJsonOutput('result', await getClient().generateInvoiceQr(req('invoice-id'), body())),
+  'generate-invoice-number': async () => setJsonOutput('result', await getClient().generateInvoiceNumber()),
+  'search-invoices': async () => setJsonOutput('result', await getClient().searchInvoices(body())),
+  'list-invoice-templates': async () => setJsonOutput('result', await getClient().listInvoiceTemplates(query('page', 'page-size', 'fields'))),
+  'create-invoice-template': async () => setJsonOutput('result', await getClient().createInvoiceTemplate(body())),
+  'get-invoice-template': async () => setJsonOutput('result', await getClient().getInvoiceTemplate(req('template-id'))),
+  'update-invoice-template': async () => setJsonOutput('result', await getClient().updateInvoiceTemplate(req('template-id'), body())),
+  'delete-invoice-template': async () => setJsonOutput('result', await getClient().deleteInvoiceTemplate(req('template-id'))),
+
+  // ── Disputes ────────────────────────────────────────────────────────
+  'list-disputes': async () => setJsonOutput('result', await getClient().listDisputes(query('start-date', 'status', 'page-size'))),
+  'get-dispute': async () => setJsonOutput('result', await getClient().getDispute(req('dispute-id'))),
+  'accept-dispute-claim': async () => setJsonOutput('result', await getClient().acceptDisputeClaim(req('dispute-id'), body())),
+  'escalate-dispute': async () => setJsonOutput('result', await getClient().escalateDispute(req('dispute-id'), body())),
+  'provide-dispute-evidence': async () => setJsonOutput('result', await getClient().provideDisputeEvidence(req('dispute-id'), body())),
+  'appeal-dispute': async () => setJsonOutput('result', await getClient().appealDispute(req('dispute-id'), body())),
+  'send-dispute-message': async () => setJsonOutput('result', await getClient().sendDisputeMessage(req('dispute-id'), body())),
+  'make-dispute-offer': async () => setJsonOutput('result', await getClient().makeDisputeOffer(req('dispute-id'), body())),
+  'accept-dispute-offer': async () => setJsonOutput('result', await getClient().acceptDisputeOffer(req('dispute-id'), body())),
+  'deny-dispute-offer': async () => setJsonOutput('result', await getClient().denyDisputeOffer(req('dispute-id'), body())),
+
+  // ── Vault / Payment Tokens ──────────────────────────────────────────
+  'create-setup-token': async () => setJsonOutput('result', await getClient().createSetupToken(body())),
+  'get-setup-token': async () => setJsonOutput('result', await getClient().getSetupToken(req('token-id'))),
+  'create-payment-token': async () => setJsonOutput('result', await getClient().createPaymentToken(body())),
+  'list-payment-tokens': async () => setJsonOutput('result', await getClient().listPaymentTokens(query('customer-id'))),
+  'get-payment-token': async () => setJsonOutput('result', await getClient().getPaymentToken(req('token-id'))),
+  'delete-payment-token': async () => setJsonOutput('result', await getClient().deletePaymentToken(req('token-id'))),
+
+  // ── Catalog Products ────────────────────────────────────────────────
+  'create-product': async () => setJsonOutput('result', await getClient().createProduct(body())),
+  'list-products': async () => setJsonOutput('result', await getClient().listProducts(query('page-size', 'page', 'total-required'))),
+  'get-product': async () => setJsonOutput('result', await getClient().getProduct(req('product-id'))),
+  'update-product': async () => setJsonOutput('result', await getClient().updateProduct(req('product-id'), body())),
+
+  // ── Reporting ───────────────────────────────────────────────────────
+  'search-transactions': async () => setJsonOutput('result', await getClient().searchTransactions(
+    query('start-date', 'end-date', 'transaction-id', 'transaction-type', 'transaction-status', 'transaction-amount', 'currency-code', 'page-size', 'page', 'fields'),
+  )),
+  'get-balances': async () => setJsonOutput('result', await getClient().getBalances(query('balance-date', 'currency-code'))),
+
+  // ── Webhooks ────────────────────────────────────────────────────────
+  'create-webhook': async () => setJsonOutput('result', await getClient().createWebhook(body())),
+  'list-webhooks': async () => setJsonOutput('result', await getClient().listWebhooks()),
+  'get-webhook': async () => setJsonOutput('result', await getClient().getWebhook(req('webhook-id'))),
+  'update-webhook': async () => setJsonOutput('result', await getClient().updateWebhook(req('webhook-id'), body())),
+  'delete-webhook': async () => setJsonOutput('result', await getClient().deleteWebhook(req('webhook-id'))),
+  'list-webhook-event-types': async () => setJsonOutput('result', await getClient().listWebhookEventTypes()),
+  'list-webhook-events': async () => setJsonOutput('result', await getClient().listWebhookEvents(query('start-date', 'end-date', 'page-size', 'event-type'))),
+  'get-webhook-event': async () => setJsonOutput('result', await getClient().getWebhookEvent(req('event-id'))),
+  'resend-webhook-event': async () => setJsonOutput('result', await getClient().resendWebhookEvent(req('event-id'), body())),
+  'simulate-webhook-event': async () => setJsonOutput('result', await getClient().simulateWebhookEvent(body())),
+  'verify-webhook-signature': async () => setJsonOutput('result', await getClient().verifyWebhookSignature(body())),
+
+  // ── Crypto Onramp ───────────────────────────────────────────────────
+  'create-onramp-session': async () => setJsonOutput('result', await getClient().createOnrampSession(body())),
+  'get-onramp-session': async () => setJsonOutput('result', await getClient().getOnrampSession(req('session-id'))),
+  'get-onramp-quotes': async () => setJsonOutput('result', await getClient().getOnrampQuotes(query('source-currency', 'destination-currency', 'source-amount'))),
+
+  // ── Identity ────────────────────────────────────────────────────────
+  'get-userinfo': async () => setJsonOutput('result', await getClient().getUserInfo()),
 })
 
 router()

@@ -15,7 +15,7 @@ inputs:
   api-url:
     description: 'PayPal API base URL'
     required: false
-    default: 'https://api-m.sandbox.paypal.com'
+    default: 'https://api-m.paypal.com'
   body:
     description: 'Request body as JSON (for create/update operations)'
     required: false

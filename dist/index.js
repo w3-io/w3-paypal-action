@@ -27495,36 +27495,26 @@ var lib_core = __nccwpck_require__(7484);
 ;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/input.js
 
 /**
- * Parse a JSON input. Returns the parsed value or undefined if empty.
- * Throws with a clear message if the input contains invalid JSON.
+ * Read an input and parse it as JSON. Returns the parsed value.
+ * Throws if the input is missing (when required) or not valid JSON.
  */
-function parseJsonInput(name) {
-    const raw = core.getInput(name);
-    if (!raw.trim())
+function parseJsonInput(name, options) {
+    const raw = core.getInput(name, options);
+    if (!raw)
         return undefined;
-    try {
-        return JSON.parse(raw);
-    }
-    catch {
-        throw new Error(`Input '${name}' is not valid JSON: ${raw.slice(0, 100)}`);
-    }
+    return JSON.parse(raw);
 }
 /**
- * Get a required input. Throws if missing or empty.
+ * Read a required input. Throws if missing.
  */
 function requireInput(name) {
-    const value = core.getInput(name);
-    if (!value.trim()) {
-        throw new Error(`Required input '${name}' is missing`);
-    }
-    return value;
+    return core.getInput(name, { required: true });
 }
 /**
- * Get an optional input with a default value.
+ * Read an optional input. Returns undefined if empty.
  */
-function getOptionalInput(name, defaultValue = "") {
-    const value = core.getInput(name);
-    return value.trim() || defaultValue;
+function getOptionalInput(name) {
+    return core.getInput(name) || undefined;
 }
 
 ;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/output.js
@@ -27544,7 +27534,9 @@ function setJsonOutput(name, value) {
  */
 function setOutputs(outputs) {
     for (const [key, value] of Object.entries(outputs)) {
-        setJsonOutput(key, value);
+        if (value != null) {
+            setJsonOutput(key, value);
+        }
     }
 }
 
@@ -27553,7 +27545,7 @@ function setOutputs(outputs) {
 /**
  * Structured error with code, message, and optional details.
  */
-class error_W3ActionError extends Error {
+class W3ActionError extends Error {
     code;
     statusCode;
     details;
@@ -27572,7 +27564,7 @@ class error_W3ActionError extends Error {
  *   main().catch(handleError);
  */
 function handleError(error) {
-    if (error instanceof error_W3ActionError) {
+    if (error instanceof W3ActionError) {
         lib_core.setOutput("error-code", error.code);
         if (error.statusCode)
             lib_core.setOutput("status-code", error.statusCode);
@@ -27589,82 +27581,35 @@ function handleError(error) {
 ;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/http.js
 
 /**
- * Make an HTTP request with timeout, retry, and structured errors.
+ * Make an HTTP request with JSON body. Returns parsed JSON response.
  *
- * - Retries on 429 and 5xx with exponential backoff
- * - Parses JSON response automatically
- * - Throws W3ActionError with status code on failure
+ * For partner API clients that don't need the bridge.
  */
 async function request(url, options = {}) {
-    const { method = "GET", headers = {}, body, timeout = 30000, retries = 2, retryDelay = 1000, } = options;
-    const init = {
-        method,
-        headers: {
-            "Content-Type": "application/json",
-            ...headers,
-        },
-        signal: AbortSignal.timeout(timeout),
-    };
-    if (body !== undefined) {
-        init.body = typeof body === "string" ? body : JSON.stringify(body);
-    }
-    let lastError;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-            const res = await fetch(url, init);
-            const raw = await res.text();
-            let parsed;
-            try {
-                parsed = JSON.parse(raw);
-            }
-            catch {
-                parsed = raw;
-            }
-            const responseHeaders = {};
-            res.headers.forEach((v, k) => {
-                responseHeaders[k] = v;
+    const { method = "GET", headers = {}, body, timeout = 30000 } = options;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(url, {
+            method,
+            headers: {
+                "Content-Type": "application/json",
+                ...headers,
+            },
+            body: body ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
+        });
+        if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new W3ActionError("HTTP_ERROR", `${response.status}: ${text}`, {
+                statusCode: response.status,
             });
-            if (!res.ok) {
-                // Retry on 429 (rate limit) and 5xx (server error)
-                if ((res.status === 429 || res.status >= 500) &&
-                    attempt < retries) {
-                    await sleep(retryDelay * 2 ** attempt);
-                    continue;
-                }
-                throw new W3ActionError("HTTP_ERROR", `${method} ${url}: ${res.status}`, {
-                    statusCode: res.status,
-                    details: parsed,
-                });
-            }
-            return { status: res.status, headers: responseHeaders, body: parsed, raw };
         }
-        catch (error) {
-            if (error instanceof W3ActionError)
-                throw error;
-            lastError = error instanceof Error ? error : new Error(String(error));
-            if (attempt < retries) {
-                await sleep(retryDelay * 2 ** attempt);
-                continue;
-            }
-        }
+        return (await response.json());
     }
-    throw new W3ActionError("REQUEST_FAILED", `${method} ${url}: ${lastError?.message ?? "unknown error"}`);
-}
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
-/**
- * Convenience: add API key auth header.
- */
-function apiKeyAuth(key, headerName = "Authorization", prefix = "Bearer") {
-    return { [headerName]: `${prefix} ${key}` };
-}
-/**
- * Convenience: add basic auth header.
- */
-function basicAuth(username, password) {
-    const encoded = Buffer.from(`${username}:${password}`).toString("base64");
-    return { Authorization: `Basic ${encoded}` };
+    finally {
+        clearTimeout(timer);
+    }
 }
 
 ;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/command.js
@@ -27720,29 +27665,17 @@ function createCommandRouter(commands) {
 // ---------------------------------------------------------------------------
 // Transport
 // ---------------------------------------------------------------------------
-/**
- * Resolve the bridge endpoint from environment variables.
- *
- * Returns a fetch-compatible URL and optional Unix socket path.
- */
 function resolveEndpoint() {
     const bridgeUrl = process.env.W3_BRIDGE_URL;
     if (bridgeUrl) {
         return { url: bridgeUrl };
     }
     const socketPath = process.env.W3_BRIDGE_SOCKET ?? "/var/run/w3/bridge.sock";
-    // Node's fetch doesn't support Unix sockets natively.
-    // We use http.request for Unix socket transport.
     return { url: "http://localhost", socketPath };
 }
-/**
- * Make an HTTP request to the bridge. Handles both TCP and Unix socket
- * transports transparently.
- */
 async function bridgeRequest(path, body) {
     const { url, socketPath } = resolveEndpoint();
     if (socketPath) {
-        // Unix socket transport via Node's http module
         const http = await Promise.resolve(/* import() */).then(__nccwpck_require__.t.bind(__nccwpck_require__, 7067, 19));
         return new Promise((resolve, reject) => {
             const payload = body ? JSON.stringify(body) : undefined;
@@ -27752,7 +27685,9 @@ async function bridgeRequest(path, body) {
                 method: body ? "POST" : "GET",
                 headers: {
                     "Content-Type": "application/json",
-                    ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}),
+                    ...(payload
+                        ? { "Content-Length": Buffer.byteLength(payload) }
+                        : {}),
                 },
             }, (res) => {
                 let data = "";
@@ -27761,25 +27696,22 @@ async function bridgeRequest(path, body) {
                     if (!res.statusCode || res.statusCode >= 400) {
                         try {
                             const err = JSON.parse(data);
-                            reject(new error_W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
+                            reject(new W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
                         }
                         catch {
-                            reject(new error_W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, {
-                                statusCode: res.statusCode,
-                            }));
+                            reject(new W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
                         }
                         return;
                     }
                     try {
-                        const parsed = JSON.parse(data);
-                        resolve(parsed);
+                        resolve(JSON.parse(data));
                     }
                     catch {
                         resolve(data);
                     }
                 });
             });
-            req.on("error", (err) => reject(new error_W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
+            req.on("error", (err) => reject(new W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
             if (payload)
                 req.write(payload);
             req.end();
@@ -27802,7 +27734,7 @@ async function bridgeRequest(path, body) {
         catch {
             // not JSON
         }
-        throw new error_W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
+        throw new W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
     }
     try {
         return JSON.parse(text);
@@ -27811,9 +27743,9 @@ async function bridgeRequest(path, body) {
         return text;
     }
 }
-/**
- * Check if the bridge is available.
- */
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 async function health() {
     try {
         const res = (await bridgeRequest("/health"));
@@ -27823,43 +27755,24 @@ async function health() {
         return false;
     }
 }
-/**
- * Call a chain operation via the bridge.
- *
- * @param chain - "ethereum", "bitcoin", or "solana"
- * @param action - Operation name (e.g. "get-balance", "transfer", "call-contract")
- * @param params - Action-specific parameters
- * @param network - Network identifier (e.g. "ethereum-sepolia", "avalanche-fuji")
- */
 async function chain(chainName, action, params, network) {
     return (await bridgeRequest(`/${chainName}/${action}`, {
         network: network ?? chainName,
         params,
     }));
 }
-/**
- * Call a crypto operation via the bridge.
- *
- * @param action - Operation name (e.g. "keccak-256", "aes-encrypt", "jwt-create")
- * @param params - Operation-specific parameters
- */
 async function bridge_crypto(action, params) {
     return (await bridgeRequest(`/crypto/${action}`, {
         params,
     }));
 }
 /**
- * The bridge client. Import and use:
+ * The bridge client.
  *
  *   import { bridge } from "@w3-io/action-core";
  *
- *   // Chain operations
  *   const bal = await bridge.chain("ethereum", "get-balance", { address });
- *
- *   // Crypto
  *   const hash = await bridge.crypto("keccak-256", { data: "0x..." });
- *
- *   // Health check
  *   const ok = await bridge.health();
  */
 const bridge = {
@@ -27868,48 +27781,69 @@ const bridge = {
     crypto: bridge_crypto,
 };
 
+;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/summary.js
+
+/**
+ * Write a job summary safely.
+ *
+ * Wraps `@actions/core` summary with proper `await` and error handling.
+ * The W3 runner sets GITHUB_STEP_SUMMARY and mounts a writable file,
+ * so this works on both GitHub Actions and W3. If the summary file is
+ * unavailable (local dev, CI without summary support), the write is
+ * silently skipped.
+ *
+ * Usage:
+ *   await writeSummary("My Action: deposit", [
+ *     ["Amount", "1000 USDC"],
+ *     ["TX", "`0xabc...`"],
+ *   ]);
+ *
+ *   await writeSummary("My Action: query", result);
+ */
+async function writeSummary(heading, content) {
+    try {
+        core.summary.addHeading(heading, 3);
+        if (typeof content === "string") {
+            core.summary.addRaw(content);
+        }
+        else if (Array.isArray(content)) {
+            // Key-value pairs rendered as markdown
+            for (const [key, value] of content) {
+                core.summary.addRaw(`**${key}:** ${value}\n\n`);
+            }
+        }
+        else {
+            core.summary.addCodeBlock(JSON.stringify(content, null, 2), "json");
+        }
+        await core.summary.write();
+    }
+    catch {
+        // Silently skip — environment may not support job summaries
+    }
+}
+
 ;// CONCATENATED MODULE: ./node_modules/@w3-io/action-core/dist/test.js
 /**
  * Test utilities for W3 actions.
  *
  * Mocks @actions/core so you can test command handlers in isolation
  * without running the full GitHub Actions runtime.
- *
- * Usage:
- *   import { mockAction, expectOutput, expectFailed } from "@w3-io/action-core/test";
- *
- *   test("keccak-256 hashes correctly", async () => {
- *     mockAction({ command: "keccak-256", input: "48656c6c6f" });
- *     await import("../src/index.js");
- *     expectOutput("result", (val) => val.includes("hash"));
- *   });
  */
 let _inputs = {};
 let _outputs = new Map();
 let _failed = null;
-/**
- * Set up mock inputs for the next action invocation.
- * Call this before importing/running the action.
- */
 function mockAction(inputs) {
     _inputs = inputs;
     _outputs = new Map();
     _failed = null;
-    // Mock process.env for @actions/core.getInput()
     for (const [key, value] of Object.entries(inputs)) {
         const envKey = `INPUT_${key.replace(/-/g, "_").toUpperCase()}`;
         process.env[envKey] = value;
     }
 }
-/**
- * Get an output that was set during action execution.
- */
 function getOutput(name) {
     return _outputs.get(name);
 }
-/**
- * Assert an output was set and optionally validate its value.
- */
 function expectOutput(name, validator) {
     const value = _outputs.get(name);
     if (value === undefined) {
@@ -27919,9 +27853,6 @@ function expectOutput(name, validator) {
         throw new Error(`Output "${name}" failed validation. Value: ${value}`);
     }
 }
-/**
- * Assert the action failed with a specific message pattern.
- */
 function expectFailed(pattern) {
     if (_failed === null) {
         throw new Error("Expected action to fail, but it succeeded");
@@ -27935,17 +27866,11 @@ function expectFailed(pattern) {
         }
     }
 }
-/**
- * Assert the action succeeded (did not call setFailed).
- */
 function expectSuccess() {
     if (_failed !== null) {
         throw new Error(`Expected action to succeed, but it failed: "${_failed}"`);
     }
 }
-/**
- * Clean up mock environment after tests.
- */
 function cleanupMock() {
     for (const key of Object.keys(process.env)) {
         if (key.startsWith("INPUT_")) {
@@ -27956,14 +27881,8 @@ function cleanupMock() {
     _outputs = new Map();
     _failed = null;
 }
-/**
- * Create a mock @actions/core module that captures outputs and failures.
- *
- * Use this to intercept setOutput/setFailed calls:
- *   const core = createMockCore();
- *   // pass core to your command handler
- */
 function createMockCore() {
+    const noopChain = () => ({ addRaw: noopChain, addHeading: noopChain, addCodeBlock: noopChain, write: async () => { } });
     return {
         getInput: (name, opts) => {
             const value = _inputs[name] ?? "";
@@ -27982,9 +27901,7 @@ function createMockCore() {
         warning: (_msg) => { },
         error: (_msg) => { },
         debug: (_msg) => { },
-        summary: {
-            addHeading: () => ({ addRaw: () => ({ write: async () => { } }) }),
-        },
+        summary: { addHeading: noopChain, addRaw: noopChain, addCodeBlock: noopChain, write: async () => { } },
     };
 }
 
@@ -27997,687 +27914,452 @@ function createMockCore() {
 
 
 
+
+;// CONCATENATED MODULE: ./src/client.js
+/**
+ * PayPal REST API client.
+ *
+ * Uses OAuth2 client credentials for authentication.
+ * All HTTP goes through action-core's `request` which handles
+ * timeout, retry on 429/5xx, and structured errors.
+ *
+ * PayPal API docs: https://developer.paypal.com/docs/api/
+ * Base URLs:
+ *   Production: https://api-m.paypal.com
+ *   Sandbox:    https://api-m.sandbox.paypal.com
+ */
+
+
+
+const DEFAULT_BASE_URL = 'https://api-m.paypal.com'
+
+class PayPalClient {
+  /**
+   * @param {object} opts
+   * @param {string} opts.clientId — OAuth2 Client ID
+   * @param {string} opts.clientSecret — OAuth2 Client Secret
+   * @param {string} [opts.baseUrl]
+   */
+  constructor({ clientId, clientSecret, baseUrl = DEFAULT_BASE_URL } = {}) {
+    if (!clientId) throw new W3ActionError('MISSING_CLIENT_ID', 'PayPal Client ID is required')
+    if (!clientSecret) throw new W3ActionError('MISSING_CLIENT_SECRET', 'PayPal Client Secret is required')
+    this.clientId = clientId
+    this.clientSecret = clientSecret
+    this.baseUrl = baseUrl.replace(/\/+$/, '')
+    this.token = null
+  }
+
+  // ---------------------------------------------------------------------------
+  // OAuth2
+  // ---------------------------------------------------------------------------
+
+  async #authenticate() {
+    if (this.token) return this.token
+    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')
+    const { body } = await request(`${this.baseUrl}/v1/oauth2/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: 'grant_type=client_credentials',
+    })
+    if (!body.access_token) {
+      throw new W3ActionError(
+        'OAUTH_FAILED',
+        `PayPal OAuth failed: ${body.error_description || JSON.stringify(body)}`,
+      )
+    }
+    this.token = body.access_token
+    return this.token
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transport
+  // ---------------------------------------------------------------------------
+
+  async #headers(extra) {
+    const token = await this.#authenticate()
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...extra,
+    }
+  }
+
+  async get(path, query) {
+    const url = this.#buildUrl(path, query)
+    const { body } = await request(url, { headers: await this.#headers() })
+    return body
+  }
+
+  async post(path, payload, extra) {
+    const url = this.#buildUrl(path)
+    const { body } = await request(url, {
+      method: 'POST',
+      headers: await this.#headers(extra),
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
+    })
+    return body
+  }
+
+  async put(path, payload) {
+    const url = this.#buildUrl(path)
+    const { body } = await request(url, {
+      method: 'PUT',
+      headers: await this.#headers(),
+      body: JSON.stringify(payload),
+    })
+    return body
+  }
+
+  async patch(path, payload) {
+    const url = this.#buildUrl(path)
+    const { body } = await request(url, {
+      method: 'PATCH',
+      headers: await this.#headers(),
+      body: JSON.stringify(payload),
+    })
+    return body
+  }
+
+  async del(path) {
+    const url = this.#buildUrl(path)
+    const { body } = await request(url, {
+      method: 'DELETE',
+      headers: await this.#headers(),
+    })
+    return body ?? { success: true }
+  }
+
+  #buildUrl(path, query) {
+    const url = new URL(path, this.baseUrl)
+    if (query) {
+      for (const [k, v] of Object.entries(query)) {
+        if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v))
+      }
+    }
+    return url.toString()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Orders
+  // ---------------------------------------------------------------------------
+
+  createOrder(p) { return this.post('/v2/checkout/orders', p) }
+  getOrder(id) { return this.get(`/v2/checkout/orders/${id}`) }
+  updateOrder(id, p) { return this.patch(`/v2/checkout/orders/${id}`, p) }
+  authorizeOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/authorize`, p || {}) }
+  captureOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/capture`, p || {}) }
+  confirmOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/confirm-payment-source`, p) }
+  trackOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/track`, p) }
+  updateOrderTracking(oid, tid, p) { return this.patch(`/v2/checkout/orders/${oid}/trackers/${tid}`, p) }
+
+  // ---------------------------------------------------------------------------
+  // Payments
+  // ---------------------------------------------------------------------------
+
+  getAuthorization(id) { return this.get(`/v2/payments/authorizations/${id}`) }
+  captureAuthorization(id, p) { return this.post(`/v2/payments/authorizations/${id}/capture`, p || {}) }
+  reauthorize(id, p) { return this.post(`/v2/payments/authorizations/${id}/reauthorize`, p || {}) }
+  voidAuthorization(id) { return this.post(`/v2/payments/authorizations/${id}/void`) }
+  getCapture(id) { return this.get(`/v2/payments/captures/${id}`) }
+  refundCapture(id, p) { return this.post(`/v2/payments/captures/${id}/refund`, p || {}) }
+  getRefund(id) { return this.get(`/v2/payments/refunds/${id}`) }
+
+  // ---------------------------------------------------------------------------
+  // Payouts
+  // ---------------------------------------------------------------------------
+
+  createPayout(p) { return this.post('/v1/payments/payouts', p) }
+  getPayout(id) { return this.get(`/v1/payments/payouts/${id}`) }
+  getPayoutItem(id) { return this.get(`/v1/payments/payouts-item/${id}`) }
+  cancelPayoutItem(id) { return this.post(`/v1/payments/payouts-item/${id}/cancel`) }
+
+  // ---------------------------------------------------------------------------
+  // Billing Plans
+  // ---------------------------------------------------------------------------
+
+  createPlan(p) { return this.post('/v1/billing/plans', p) }
+  listPlans(q) { return this.get('/v1/billing/plans', q) }
+  getPlan(id) { return this.get(`/v1/billing/plans/${id}`) }
+  updatePlan(id, p) { return this.patch(`/v1/billing/plans/${id}`, p) }
+  activatePlan(id) { return this.post(`/v1/billing/plans/${id}/activate`) }
+  deactivatePlan(id) { return this.post(`/v1/billing/plans/${id}/deactivate`) }
+  updatePlanPricing(id, p) { return this.post(`/v1/billing/plans/${id}/update-pricing-schemes`, p) }
+
+  // ---------------------------------------------------------------------------
+  // Subscriptions
+  // ---------------------------------------------------------------------------
+
+  createSubscription(p) { return this.post('/v1/billing/subscriptions', p) }
+  getSubscription(id) { return this.get(`/v1/billing/subscriptions/${id}`) }
+  updateSubscription(id, p) { return this.patch(`/v1/billing/subscriptions/${id}`, p) }
+  reviseSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/revise`, p) }
+  suspendSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/suspend`, p || { reason: 'Suspended via W3 workflow' }) }
+  cancelSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/cancel`, p || { reason: 'Cancelled via W3 workflow' }) }
+  activateSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/activate`, p || { reason: 'Reactivated via W3 workflow' }) }
+  captureSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/capture`, p) }
+  listSubscriptionTransactions(id, q) { return this.get(`/v1/billing/subscriptions/${id}/transactions`, q) }
+
+  // ---------------------------------------------------------------------------
+  // Invoicing
+  // ---------------------------------------------------------------------------
+
+  createInvoice(p) { return this.post('/v2/invoicing/invoices', p) }
+  listInvoices(q) { return this.get('/v2/invoicing/invoices', q) }
+  getInvoice(id) { return this.get(`/v2/invoicing/invoices/${id}`) }
+  updateInvoice(id, p) { return this.put(`/v2/invoicing/invoices/${id}`, p) }
+  deleteInvoice(id) { return this.del(`/v2/invoicing/invoices/${id}`) }
+  sendInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/send`, p || {}) }
+  remindInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/remind`, p || {}) }
+  cancelInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/cancel`, p || {}) }
+  recordInvoicePayment(id, p) { return this.post(`/v2/invoicing/invoices/${id}/payments`, p) }
+  deleteInvoicePayment(iid, pid) { return this.del(`/v2/invoicing/invoices/${iid}/payments/${pid}`) }
+  recordInvoiceRefund(id, p) { return this.post(`/v2/invoicing/invoices/${id}/refunds`, p) }
+  generateInvoiceQr(id, p) { return this.post(`/v2/invoicing/invoices/${id}/generate-qr-code`, p || { width: 400, height: 400 }) }
+  generateInvoiceNumber() { return this.post('/v2/invoicing/generate-next-invoice-number', {}) }
+  searchInvoices(p) { return this.post('/v2/invoicing/search-invoices', p) }
+  listInvoiceTemplates(q) { return this.get('/v2/invoicing/templates', q) }
+  createInvoiceTemplate(p) { return this.post('/v2/invoicing/templates', p) }
+  getInvoiceTemplate(id) { return this.get(`/v2/invoicing/templates/${id}`) }
+  updateInvoiceTemplate(id, p) { return this.put(`/v2/invoicing/templates/${id}`, p) }
+  deleteInvoiceTemplate(id) { return this.del(`/v2/invoicing/templates/${id}`) }
+
+  // ---------------------------------------------------------------------------
+  // Disputes
+  // ---------------------------------------------------------------------------
+
+  listDisputes(q) { return this.get('/v1/customer/disputes', q) }
+  getDispute(id) { return this.get(`/v1/customer/disputes/${id}`) }
+  acceptDisputeClaim(id, p) { return this.post(`/v1/customer/disputes/${id}/accept-claim`, p || {}) }
+  escalateDispute(id, p) { return this.post(`/v1/customer/disputes/${id}/escalate`, p || { note: 'Escalated via W3 workflow' }) }
+  provideDisputeEvidence(id, p) { return this.post(`/v1/customer/disputes/${id}/provide-evidence`, p) }
+  appealDispute(id, p) { return this.post(`/v1/customer/disputes/${id}/appeal`, p) }
+  sendDisputeMessage(id, p) { return this.post(`/v1/customer/disputes/${id}/send-message`, p) }
+  makeDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/make-offer`, p) }
+  acceptDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/accept-offer`, p || {}) }
+  denyDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/deny-offer`, p || {}) }
+
+  // ---------------------------------------------------------------------------
+  // Vault / Payment Tokens
+  // ---------------------------------------------------------------------------
+
+  createSetupToken(p) { return this.post('/v3/vault/setup-tokens', p) }
+  getSetupToken(id) { return this.get(`/v3/vault/setup-tokens/${id}`) }
+  createPaymentToken(p) { return this.post('/v3/vault/payment-tokens', p) }
+  listPaymentTokens(q) { return this.get('/v3/vault/payment-tokens', q) }
+  getPaymentToken(id) { return this.get(`/v3/vault/payment-tokens/${id}`) }
+  deletePaymentToken(id) { return this.del(`/v3/vault/payment-tokens/${id}`) }
+
+  // ---------------------------------------------------------------------------
+  // Catalog Products
+  // ---------------------------------------------------------------------------
+
+  createProduct(p) { return this.post('/v1/catalogs/products', p) }
+  listProducts(q) { return this.get('/v1/catalogs/products', q) }
+  getProduct(id) { return this.get(`/v1/catalogs/products/${id}`) }
+  updateProduct(id, p) { return this.patch(`/v1/catalogs/products/${id}`, p) }
+
+  // ---------------------------------------------------------------------------
+  // Reporting
+  // ---------------------------------------------------------------------------
+
+  searchTransactions(q) { return this.get('/v1/reporting/transactions', q) }
+  getBalances(q) { return this.get('/v1/reporting/balances', q) }
+
+  // ---------------------------------------------------------------------------
+  // Webhooks
+  // ---------------------------------------------------------------------------
+
+  createWebhook(p) { return this.post('/v1/notifications/webhooks', p) }
+  listWebhooks() { return this.get('/v1/notifications/webhooks') }
+  getWebhook(id) { return this.get(`/v1/notifications/webhooks/${id}`) }
+  updateWebhook(id, p) { return this.patch(`/v1/notifications/webhooks/${id}`, p) }
+  deleteWebhook(id) { return this.del(`/v1/notifications/webhooks/${id}`) }
+  listWebhookEventTypes() { return this.get('/v1/notifications/webhooks-event-types') }
+  listWebhookEvents(q) { return this.get('/v1/notifications/webhooks-events', q) }
+  getWebhookEvent(id) { return this.get(`/v1/notifications/webhooks-events/${id}`) }
+  resendWebhookEvent(id, p) { return this.post(`/v1/notifications/webhooks-events/${id}/resend`, p || {}) }
+  simulateWebhookEvent(p) { return this.post('/v1/notifications/simulate-event', p) }
+  verifyWebhookSignature(p) { return this.post('/v1/notifications/verify-webhook-signature', p) }
+
+  // ---------------------------------------------------------------------------
+  // Crypto Onramp
+  // ---------------------------------------------------------------------------
+
+  createOnrampSession(p) { return this.post('/v1/crypto/onramp/sessions', p) }
+  getOnrampSession(id) { return this.get(`/v1/crypto/onramp/sessions/${id}`) }
+  getOnrampQuotes(q) { return this.get('/v1/crypto/onramp/quotes', q) }
+
+  // ---------------------------------------------------------------------------
+  // Identity
+  // ---------------------------------------------------------------------------
+
+  getUserInfo() { return this.get('/v1/identity/oauth2/userinfo', { schema: 'openid' }) }
+}
+
 ;// CONCATENATED MODULE: ./src/index.js
+/**
+ * W3 PayPal Action — 91 commands across 12 categories.
+ *
+ * Orders, payments, payouts, subscriptions, invoicing, disputes,
+ * vault, catalog products, reporting, webhooks, crypto onramp,
+ * and identity.
+ */
 
 
 
-// -- Shared helpers -----------------------------------------------------------
 
-async function getAccessToken(apiUrl, clientId, clientSecret) {
-  const tokenRes = await fetch(`${apiUrl}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization:
-        'Basic ' +
-        Buffer.from(`${clientId}:${clientSecret}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
+
+function getClient() {
+  return new PayPalClient({
+    clientId: lib_core.getInput('client-id', { required: true }),
+    clientSecret: lib_core.getInput('client-secret', { required: true }),
+    baseUrl: lib_core.getInput('api-url') || undefined,
   })
-  const tokenData = await tokenRes.json()
-  if (!tokenData.access_token) {
-    throw new Error(
-      `OAuth failed: ${tokenData.error_description || JSON.stringify(tokenData)}`,
-    )
+}
+
+function jsonInput(name) {
+  const raw = lib_core.getInput(name)
+  if (!raw) return undefined
+  try { return JSON.parse(raw) } catch { return raw }
+}
+
+function body() { return jsonInput('body') }
+function req(name) { return lib_core.getInput(name, { required: true }) }
+function opt(name) { return core.getInput(name) || undefined }
+
+function query(...names) {
+  const q = {}
+  for (const name of names) {
+    const v = lib_core.getInput(name)
+    if (v) q[name.replace(/-/g, '_')] = v
   }
-  return tokenData.access_token
+  return Object.keys(q).length ? q : undefined
 }
-
-function makeRequest(apiUrl, headers) {
-  return async function request(method, path, bodyObj, extraHeaders) {
-    const url = `${apiUrl}${path}`
-    const opts = { method, headers: { ...headers, ...extraHeaders } }
-    if (
-      bodyObj &&
-      (method === 'POST' || method === 'PUT' || method === 'PATCH')
-    ) {
-      opts.body = JSON.stringify(bodyObj)
-    }
-    const res = await fetch(url, opts)
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    let data
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = text
-    }
-    if (!res.ok) {
-      const msg = typeof data === 'object' ? JSON.stringify(data) : data
-      throw new Error(`${method} ${path} returned ${res.status}: ${msg}`)
-    }
-    return data
-  }
-}
-
-function qs(params) {
-  const entries = Object.entries(params).filter(([, v]) => v !== '')
-  return entries.length
-    ? '?' + entries.map(([k, v]) => `${k}=${v}`).join('&')
-    : ''
-}
-
-function parseBody() {
-  const body = lib_core.getInput('body') || ''
-  if (!body) throw new Error('body input is required for this command')
-  return JSON.parse(body)
-}
-
-async function setup() {
-  const clientId = lib_core.getInput('client-id', { required: true })
-  const clientSecret = lib_core.getInput('client-secret', { required: true })
-  const apiUrl = lib_core.getInput('api-url') || 'https://api-m.sandbox.paypal.com'
-
-  const token = await getAccessToken(apiUrl, clientId, clientSecret)
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-  return makeRequest(apiUrl, headers)
-}
-
-function handler(fn) {
-  return async () => {
-    const request = await setup()
-    const result = await fn(request)
-    setJsonOutput('result', result)
-  }
-}
-
-// -- Router -------------------------------------------------------------------
 
 const router = createCommandRouter({
-  // =================================================================
-  // ORDERS
-  // =================================================================
-
-  'create-order': handler(async (request) => {
-    return request('POST', '/v2/checkout/orders', parseBody())
-  }),
-
-  'get-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('GET', `/v2/checkout/orders/${orderId}`)
-  }),
-
-  'update-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('PATCH', `/v2/checkout/orders/${orderId}`, parseBody())
-  }),
-
-  'authorize-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/authorize`, body ? JSON.parse(body) : {})
-  }),
-
-  'capture-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/capture`, body ? JSON.parse(body) : {})
-  }),
-
-  'confirm-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/confirm-payment-source`, parseBody())
-  }),
-
-  'track-order': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    return request('POST', `/v2/checkout/orders/${orderId}/track`, parseBody())
-  }),
-
-  'update-order-tracking': handler(async (request) => {
-    const orderId = lib_core.getInput('order-id') || ''
-    const trackerId = lib_core.getInput('tracker-id') || ''
-    if (!orderId) throw new Error('order-id is required')
-    if (!trackerId) throw new Error('tracker-id is required')
-    return request('PATCH', `/v2/checkout/orders/${orderId}/trackers/${trackerId}`, parseBody())
-  }),
-
-  // =================================================================
-  // PAYMENTS (post-order lifecycle)
-  // =================================================================
-
-  'get-authorization': handler(async (request) => {
-    const authorizationId = lib_core.getInput('authorization-id') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('GET', `/v2/payments/authorizations/${authorizationId}`)
-  }),
-
-  'capture-authorization': handler(async (request) => {
-    const authorizationId = lib_core.getInput('authorization-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/capture`, body ? JSON.parse(body) : {})
-  }),
-
-  reauthorize: handler(async (request) => {
-    const authorizationId = lib_core.getInput('authorization-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/reauthorize`, body ? JSON.parse(body) : {})
-  }),
-
-  'void-authorization': handler(async (request) => {
-    const authorizationId = lib_core.getInput('authorization-id') || ''
-    if (!authorizationId) throw new Error('authorization-id is required')
-    return request('POST', `/v2/payments/authorizations/${authorizationId}/void`)
-  }),
-
-  'get-capture': handler(async (request) => {
-    const captureId = lib_core.getInput('capture-id') || ''
-    if (!captureId) throw new Error('capture-id is required')
-    return request('GET', `/v2/payments/captures/${captureId}`)
-  }),
-
-  'refund-capture': handler(async (request) => {
-    const captureId = lib_core.getInput('capture-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!captureId) throw new Error('capture-id is required')
-    return request('POST', `/v2/payments/captures/${captureId}/refund`, body ? JSON.parse(body) : {})
-  }),
-
-  'get-refund': handler(async (request) => {
-    const refundId = lib_core.getInput('refund-id') || ''
-    if (!refundId) throw new Error('refund-id is required')
-    return request('GET', `/v2/payments/refunds/${refundId}`)
-  }),
-
-  // =================================================================
-  // PAYOUTS
-  // =================================================================
-
-  'create-payout': handler(async (request) => {
-    return request('POST', '/v1/payments/payouts', parseBody())
-  }),
-
-  'get-payout': handler(async (request) => {
-    const payoutId = lib_core.getInput('payout-id') || ''
-    if (!payoutId) throw new Error('payout-id is required')
-    return request('GET', `/v1/payments/payouts/${payoutId}`)
-  }),
-
-  'get-payout-item': handler(async (request) => {
-    const itemId = lib_core.getInput('item-id') || ''
-    if (!itemId) throw new Error('item-id is required')
-    return request('GET', `/v1/payments/payouts-item/${itemId}`)
-  }),
-
-  'cancel-payout-item': handler(async (request) => {
-    const itemId = lib_core.getInput('item-id') || ''
-    if (!itemId) throw new Error('item-id is required')
-    return request('POST', `/v1/payments/payouts-item/${itemId}/cancel`)
-  }),
-
-  // =================================================================
-  // SUBSCRIPTIONS -- Plans
-  // =================================================================
-
-  'create-plan': handler(async (request) => {
-    return request('POST', '/v1/billing/plans', parseBody())
-  }),
-
-  'list-plans': handler(async (request) => {
-    const pageSize = lib_core.getInput('page-size') || ''
-    const page = lib_core.getInput('page') || ''
-    const totalRequired = lib_core.getInput('total-required') || ''
-    return request('GET', `/v1/billing/plans${qs({ page_size: pageSize, page, total_required: totalRequired })}`)
-  }),
-
-  'get-plan': handler(async (request) => {
-    const planId = lib_core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('GET', `/v1/billing/plans/${planId}`)
-  }),
-
-  'update-plan': handler(async (request) => {
-    const planId = lib_core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('PATCH', `/v1/billing/plans/${planId}`, parseBody())
-  }),
-
-  'activate-plan': handler(async (request) => {
-    const planId = lib_core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/activate`)
-  }),
-
-  'deactivate-plan': handler(async (request) => {
-    const planId = lib_core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/deactivate`)
-  }),
-
-  'update-plan-pricing': handler(async (request) => {
-    const planId = lib_core.getInput('plan-id') || ''
-    if (!planId) throw new Error('plan-id is required')
-    return request('POST', `/v1/billing/plans/${planId}/update-pricing-schemes`, parseBody())
-  }),
-
-  // =================================================================
-  // SUBSCRIPTIONS -- Subscriptions
-  // =================================================================
-
-  'create-subscription': handler(async (request) => {
-    return request('POST', '/v1/billing/subscriptions', parseBody())
-  }),
-
-  'get-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('GET', `/v1/billing/subscriptions/${subscriptionId}`)
-  }),
-
-  'update-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('PATCH', `/v1/billing/subscriptions/${subscriptionId}`, parseBody())
-  }),
-
-  'revise-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/revise`, parseBody())
-  }),
-
-  'suspend-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/suspend`, body ? JSON.parse(body) : { reason: 'Suspended via W3 workflow' })
-  }),
-
-  'cancel-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/cancel`, body ? JSON.parse(body) : { reason: 'Cancelled via W3 workflow' })
-  }),
-
-  'activate-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/activate`, body ? JSON.parse(body) : { reason: 'Reactivated via W3 workflow' })
-  }),
-
-  'capture-subscription': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('POST', `/v1/billing/subscriptions/${subscriptionId}/capture`, parseBody())
-  }),
-
-  'list-subscription-transactions': handler(async (request) => {
-    const subscriptionId = lib_core.getInput('subscription-id') || ''
-    const startDate = lib_core.getInput('start-date') || ''
-    const endDate = lib_core.getInput('end-date') || ''
-    if (!subscriptionId) throw new Error('subscription-id is required')
-    return request('GET', `/v1/billing/subscriptions/${subscriptionId}/transactions${qs({ start_time: startDate, end_time: endDate })}`)
-  }),
-
-  // =================================================================
-  // INVOICING
-  // =================================================================
-
-  'create-invoice': handler(async (request) => {
-    return request('POST', '/v2/invoicing/invoices', parseBody())
-  }),
-
-  'list-invoices': handler(async (request) => {
-    const page = lib_core.getInput('page') || ''
-    const pageSize = lib_core.getInput('page-size') || ''
-    const totalRequired = lib_core.getInput('total-required') || ''
-    const fields = lib_core.getInput('fields') || ''
-    return request('GET', `/v2/invoicing/invoices${qs({ page, page_size: pageSize, total_required: totalRequired, fields })}`)
-  }),
-
-  'get-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('GET', `/v2/invoicing/invoices/${invoiceId}`)
-  }),
-
-  'update-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('PUT', `/v2/invoicing/invoices/${invoiceId}`, parseBody())
-  }),
-
-  'delete-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('DELETE', `/v2/invoicing/invoices/${invoiceId}`)
-  }),
-
-  'send-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/send`, body ? JSON.parse(body) : {})
-  }),
-
-  'remind-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/remind`, body ? JSON.parse(body) : {})
-  }),
-
-  'cancel-invoice': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/cancel`, body ? JSON.parse(body) : {})
-  }),
-
-  'record-invoice-payment': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/payments`, parseBody())
-  }),
-
-  'delete-invoice-payment': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    const paymentId = lib_core.getInput('payment-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    if (!paymentId) throw new Error('payment-id is required')
-    return request('DELETE', `/v2/invoicing/invoices/${invoiceId}/payments/${paymentId}`)
-  }),
-
-  'record-invoice-refund': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/refunds`, parseBody())
-  }),
-
-  'generate-invoice-qr': handler(async (request) => {
-    const invoiceId = lib_core.getInput('invoice-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!invoiceId) throw new Error('invoice-id is required')
-    return request('POST', `/v2/invoicing/invoices/${invoiceId}/generate-qr-code`, body ? JSON.parse(body) : { width: 400, height: 400 })
-  }),
-
-  'generate-invoice-number': handler(async (request) => {
-    return request('POST', '/v2/invoicing/generate-next-invoice-number', {})
-  }),
-
-  'search-invoices': handler(async (request) => {
-    return request('POST', '/v2/invoicing/search-invoices', parseBody())
-  }),
-
-  // Invoice templates
-  'list-invoice-templates': handler(async (request) => {
-    const page = lib_core.getInput('page') || ''
-    const pageSize = lib_core.getInput('page-size') || ''
-    const fields = lib_core.getInput('fields') || ''
-    return request('GET', `/v2/invoicing/templates${qs({ page, page_size: pageSize, fields })}`)
-  }),
-
-  'create-invoice-template': handler(async (request) => {
-    return request('POST', '/v2/invoicing/templates', parseBody())
-  }),
-
-  'get-invoice-template': handler(async (request) => {
-    const templateId = lib_core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('GET', `/v2/invoicing/templates/${templateId}`)
-  }),
-
-  'update-invoice-template': handler(async (request) => {
-    const templateId = lib_core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('PUT', `/v2/invoicing/templates/${templateId}`, parseBody())
-  }),
-
-  'delete-invoice-template': handler(async (request) => {
-    const templateId = lib_core.getInput('template-id') || ''
-    if (!templateId) throw new Error('template-id is required')
-    return request('DELETE', `/v2/invoicing/templates/${templateId}`)
-  }),
-
-  // =================================================================
-  // DISPUTES
-  // =================================================================
-
-  'list-disputes': handler(async (request) => {
-    const startDate = lib_core.getInput('start-date') || ''
-    const status = lib_core.getInput('status') || ''
-    const pageSize = lib_core.getInput('page-size') || ''
-    return request('GET', `/v1/customer/disputes${qs({ start_time: startDate, dispute_state: status, page_size: pageSize })}`)
-  }),
-
-  'get-dispute': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('GET', `/v1/customer/disputes/${disputeId}`)
-  }),
-
-  'accept-dispute-claim': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/accept-claim`, body ? JSON.parse(body) : {})
-  }),
-
-  'escalate-dispute': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/escalate`, body ? JSON.parse(body) : { note: 'Escalated via W3 workflow' })
-  }),
-
-  'provide-dispute-evidence': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/provide-evidence`, parseBody())
-  }),
-
-  'appeal-dispute': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/appeal`, parseBody())
-  }),
-
-  'send-dispute-message': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/send-message`, parseBody())
-  }),
-
-  'make-dispute-offer': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/make-offer`, parseBody())
-  }),
-
-  'accept-dispute-offer': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/accept-offer`, body ? JSON.parse(body) : {})
-  }),
-
-  'deny-dispute-offer': handler(async (request) => {
-    const disputeId = lib_core.getInput('dispute-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!disputeId) throw new Error('dispute-id is required')
-    return request('POST', `/v1/customer/disputes/${disputeId}/deny-offer`, body ? JSON.parse(body) : {})
-  }),
-
-  // =================================================================
-  // VAULT / PAYMENT TOKENS
-  // =================================================================
-
-  'create-setup-token': handler(async (request) => {
-    return request('POST', '/v3/vault/setup-tokens', parseBody())
-  }),
-
-  'get-setup-token': handler(async (request) => {
-    const tokenId = lib_core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('GET', `/v3/vault/setup-tokens/${tokenId}`)
-  }),
-
-  'create-payment-token': handler(async (request) => {
-    return request('POST', '/v3/vault/payment-tokens', parseBody())
-  }),
-
-  'list-payment-tokens': handler(async (request) => {
-    return request('GET', `/v3/vault/payment-tokens${qs({ customer_id: lib_core.getInput('customer-id') || '' })}`)
-  }),
-
-  'get-payment-token': handler(async (request) => {
-    const tokenId = lib_core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('GET', `/v3/vault/payment-tokens/${tokenId}`)
-  }),
-
-  'delete-payment-token': handler(async (request) => {
-    const tokenId = lib_core.getInput('token-id') || ''
-    if (!tokenId) throw new Error('token-id is required')
-    return request('DELETE', `/v3/vault/payment-tokens/${tokenId}`)
-  }),
-
-  // =================================================================
-  // CATALOG PRODUCTS
-  // =================================================================
-
-  'create-product': handler(async (request) => {
-    return request('POST', '/v1/catalogs/products', parseBody())
-  }),
-
-  'list-products': handler(async (request) => {
-    const pageSize = lib_core.getInput('page-size') || ''
-    const page = lib_core.getInput('page') || ''
-    const totalRequired = lib_core.getInput('total-required') || ''
-    return request('GET', `/v1/catalogs/products${qs({ page_size: pageSize, page, total_required: totalRequired })}`)
-  }),
-
-  'get-product': handler(async (request) => {
-    const productId = lib_core.getInput('product-id') || ''
-    if (!productId) throw new Error('product-id is required')
-    return request('GET', `/v1/catalogs/products/${productId}`)
-  }),
-
-  'update-product': handler(async (request) => {
-    const productId = lib_core.getInput('product-id') || ''
-    if (!productId) throw new Error('product-id is required')
-    return request('PATCH', `/v1/catalogs/products/${productId}`, parseBody())
-  }),
-
-  // =================================================================
-  // REPORTING
-  // =================================================================
-
-  'search-transactions': handler(async (request) => {
-    const startDate = lib_core.getInput('start-date') || ''
-    const endDate = lib_core.getInput('end-date') || ''
-    const transactionId = lib_core.getInput('transaction-id') || ''
-    const transactionType = lib_core.getInput('transaction-type') || ''
-    const transactionStatus = lib_core.getInput('transaction-status') || ''
-    const transactionAmount = lib_core.getInput('transaction-amount') || ''
-    const currencyCode = lib_core.getInput('currency-code') || ''
-    const pageSize = lib_core.getInput('page-size') || ''
-    const page = lib_core.getInput('page') || ''
-    const fields = lib_core.getInput('fields') || ''
-    return request('GET', `/v1/reporting/transactions${qs({
-      start_date: startDate,
-      end_date: endDate,
-      transaction_id: transactionId,
-      transaction_type: transactionType,
-      transaction_status: transactionStatus,
-      transaction_amount: transactionAmount,
-      currency_code: currencyCode,
-      page_size: pageSize,
-      page,
-      fields,
-    })}`)
-  }),
-
-  'get-balances': handler(async (request) => {
-    const balanceDate = lib_core.getInput('balance-date') || ''
-    const currencyCode = lib_core.getInput('currency-code') || ''
-    return request('GET', `/v1/reporting/balances${qs({ as_of_time: balanceDate, currency_code: currencyCode })}`)
-  }),
-
-  // =================================================================
-  // WEBHOOKS
-  // =================================================================
-
-  'create-webhook': handler(async (request) => {
-    return request('POST', '/v1/notifications/webhooks', parseBody())
-  }),
-
-  'list-webhooks': handler(async (request) => {
-    return request('GET', '/v1/notifications/webhooks')
-  }),
-
-  'get-webhook': handler(async (request) => {
-    const webhookId = lib_core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('GET', `/v1/notifications/webhooks/${webhookId}`)
-  }),
-
-  'update-webhook': handler(async (request) => {
-    const webhookId = lib_core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('PATCH', `/v1/notifications/webhooks/${webhookId}`, parseBody())
-  }),
-
-  'delete-webhook': handler(async (request) => {
-    const webhookId = lib_core.getInput('webhook-id') || ''
-    if (!webhookId) throw new Error('webhook-id is required')
-    return request('DELETE', `/v1/notifications/webhooks/${webhookId}`)
-  }),
-
-  'list-webhook-event-types': handler(async (request) => {
-    return request('GET', '/v1/notifications/webhooks-event-types')
-  }),
-
-  'list-webhook-events': handler(async (request) => {
-    const startDate = lib_core.getInput('start-date') || ''
-    const endDate = lib_core.getInput('end-date') || ''
-    const pageSize = lib_core.getInput('page-size') || ''
-    const eventType = lib_core.getInput('event-type') || ''
-    return request('GET', `/v1/notifications/webhooks-events${qs({ start_time: startDate, end_time: endDate, page_size: pageSize, event_type: eventType })}`)
-  }),
-
-  'get-webhook-event': handler(async (request) => {
-    const eventId = lib_core.getInput('event-id') || ''
-    if (!eventId) throw new Error('event-id is required')
-    return request('GET', `/v1/notifications/webhooks-events/${eventId}`)
-  }),
-
-  'resend-webhook-event': handler(async (request) => {
-    const eventId = lib_core.getInput('event-id') || ''
-    const body = lib_core.getInput('body') || ''
-    if (!eventId) throw new Error('event-id is required')
-    return request('POST', `/v1/notifications/webhooks-events/${eventId}/resend`, body ? JSON.parse(body) : {})
-  }),
-
-  'simulate-webhook-event': handler(async (request) => {
-    return request('POST', '/v1/notifications/simulate-event', parseBody())
-  }),
-
-  'verify-webhook-signature': handler(async (request) => {
-    return request('POST', '/v1/notifications/verify-webhook-signature', parseBody())
-  }),
-
-  // =================================================================
-  // IDENTITY
-  // =================================================================
-
-  'get-userinfo': handler(async (request) => {
-    return request('GET', '/v1/identity/oauth2/userinfo?schema=openid')
-  }),
+  // ── Orders ──────────────────────────────────────────────────────────
+  'create-order': async () => setJsonOutput('result', await getClient().createOrder(body())),
+  'get-order': async () => setJsonOutput('result', await getClient().getOrder(req('order-id'))),
+  'update-order': async () => setJsonOutput('result', await getClient().updateOrder(req('order-id'), body())),
+  'authorize-order': async () => setJsonOutput('result', await getClient().authorizeOrder(req('order-id'), body())),
+  'capture-order': async () => setJsonOutput('result', await getClient().captureOrder(req('order-id'), body())),
+  'confirm-order': async () => setJsonOutput('result', await getClient().confirmOrder(req('order-id'), body())),
+  'track-order': async () => setJsonOutput('result', await getClient().trackOrder(req('order-id'), body())),
+  'update-order-tracking': async () => setJsonOutput('result', await getClient().updateOrderTracking(req('order-id'), req('tracker-id'), body())),
+
+  // ── Payments ────────────────────────────────────────────────────────
+  'get-authorization': async () => setJsonOutput('result', await getClient().getAuthorization(req('authorization-id'))),
+  'capture-authorization': async () => setJsonOutput('result', await getClient().captureAuthorization(req('authorization-id'), body())),
+  'reauthorize': async () => setJsonOutput('result', await getClient().reauthorize(req('authorization-id'), body())),
+  'void-authorization': async () => setJsonOutput('result', await getClient().voidAuthorization(req('authorization-id'))),
+  'get-capture': async () => setJsonOutput('result', await getClient().getCapture(req('capture-id'))),
+  'refund-capture': async () => setJsonOutput('result', await getClient().refundCapture(req('capture-id'), body())),
+  'get-refund': async () => setJsonOutput('result', await getClient().getRefund(req('refund-id'))),
+
+  // ── Payouts ─────────────────────────────────────────────────────────
+  'create-payout': async () => setJsonOutput('result', await getClient().createPayout(body())),
+  'get-payout': async () => setJsonOutput('result', await getClient().getPayout(req('payout-id'))),
+  'get-payout-item': async () => setJsonOutput('result', await getClient().getPayoutItem(req('item-id'))),
+  'cancel-payout-item': async () => setJsonOutput('result', await getClient().cancelPayoutItem(req('item-id'))),
+
+  // ── Billing Plans ───────────────────────────────────────────────────
+  'create-plan': async () => setJsonOutput('result', await getClient().createPlan(body())),
+  'list-plans': async () => setJsonOutput('result', await getClient().listPlans(query('page-size', 'page', 'total-required'))),
+  'get-plan': async () => setJsonOutput('result', await getClient().getPlan(req('plan-id'))),
+  'update-plan': async () => setJsonOutput('result', await getClient().updatePlan(req('plan-id'), body())),
+  'activate-plan': async () => setJsonOutput('result', await getClient().activatePlan(req('plan-id'))),
+  'deactivate-plan': async () => setJsonOutput('result', await getClient().deactivatePlan(req('plan-id'))),
+  'update-plan-pricing': async () => setJsonOutput('result', await getClient().updatePlanPricing(req('plan-id'), body())),
+
+  // ── Subscriptions ───────────────────────────────────────────────────
+  'create-subscription': async () => setJsonOutput('result', await getClient().createSubscription(body())),
+  'get-subscription': async () => setJsonOutput('result', await getClient().getSubscription(req('subscription-id'))),
+  'update-subscription': async () => setJsonOutput('result', await getClient().updateSubscription(req('subscription-id'), body())),
+  'revise-subscription': async () => setJsonOutput('result', await getClient().reviseSubscription(req('subscription-id'), body())),
+  'suspend-subscription': async () => setJsonOutput('result', await getClient().suspendSubscription(req('subscription-id'), body())),
+  'cancel-subscription': async () => setJsonOutput('result', await getClient().cancelSubscription(req('subscription-id'), body())),
+  'activate-subscription': async () => setJsonOutput('result', await getClient().activateSubscription(req('subscription-id'), body())),
+  'capture-subscription': async () => setJsonOutput('result', await getClient().captureSubscription(req('subscription-id'), body())),
+  'list-subscription-transactions': async () => setJsonOutput('result', await getClient().listSubscriptionTransactions(req('subscription-id'), query('start-date', 'end-date'))),
+
+  // ── Invoicing ───────────────────────────────────────────────────────
+  'create-invoice': async () => setJsonOutput('result', await getClient().createInvoice(body())),
+  'list-invoices': async () => setJsonOutput('result', await getClient().listInvoices(query('page', 'page-size', 'total-required', 'fields'))),
+  'get-invoice': async () => setJsonOutput('result', await getClient().getInvoice(req('invoice-id'))),
+  'update-invoice': async () => setJsonOutput('result', await getClient().updateInvoice(req('invoice-id'), body())),
+  'delete-invoice': async () => setJsonOutput('result', await getClient().deleteInvoice(req('invoice-id'))),
+  'send-invoice': async () => setJsonOutput('result', await getClient().sendInvoice(req('invoice-id'), body())),
+  'remind-invoice': async () => setJsonOutput('result', await getClient().remindInvoice(req('invoice-id'), body())),
+  'cancel-invoice': async () => setJsonOutput('result', await getClient().cancelInvoice(req('invoice-id'), body())),
+  'record-invoice-payment': async () => setJsonOutput('result', await getClient().recordInvoicePayment(req('invoice-id'), body())),
+  'delete-invoice-payment': async () => setJsonOutput('result', await getClient().deleteInvoicePayment(req('invoice-id'), req('payment-id'))),
+  'record-invoice-refund': async () => setJsonOutput('result', await getClient().recordInvoiceRefund(req('invoice-id'), body())),
+  'generate-invoice-qr': async () => setJsonOutput('result', await getClient().generateInvoiceQr(req('invoice-id'), body())),
+  'generate-invoice-number': async () => setJsonOutput('result', await getClient().generateInvoiceNumber()),
+  'search-invoices': async () => setJsonOutput('result', await getClient().searchInvoices(body())),
+  'list-invoice-templates': async () => setJsonOutput('result', await getClient().listInvoiceTemplates(query('page', 'page-size', 'fields'))),
+  'create-invoice-template': async () => setJsonOutput('result', await getClient().createInvoiceTemplate(body())),
+  'get-invoice-template': async () => setJsonOutput('result', await getClient().getInvoiceTemplate(req('template-id'))),
+  'update-invoice-template': async () => setJsonOutput('result', await getClient().updateInvoiceTemplate(req('template-id'), body())),
+  'delete-invoice-template': async () => setJsonOutput('result', await getClient().deleteInvoiceTemplate(req('template-id'))),
+
+  // ── Disputes ────────────────────────────────────────────────────────
+  'list-disputes': async () => setJsonOutput('result', await getClient().listDisputes(query('start-date', 'status', 'page-size'))),
+  'get-dispute': async () => setJsonOutput('result', await getClient().getDispute(req('dispute-id'))),
+  'accept-dispute-claim': async () => setJsonOutput('result', await getClient().acceptDisputeClaim(req('dispute-id'), body())),
+  'escalate-dispute': async () => setJsonOutput('result', await getClient().escalateDispute(req('dispute-id'), body())),
+  'provide-dispute-evidence': async () => setJsonOutput('result', await getClient().provideDisputeEvidence(req('dispute-id'), body())),
+  'appeal-dispute': async () => setJsonOutput('result', await getClient().appealDispute(req('dispute-id'), body())),
+  'send-dispute-message': async () => setJsonOutput('result', await getClient().sendDisputeMessage(req('dispute-id'), body())),
+  'make-dispute-offer': async () => setJsonOutput('result', await getClient().makeDisputeOffer(req('dispute-id'), body())),
+  'accept-dispute-offer': async () => setJsonOutput('result', await getClient().acceptDisputeOffer(req('dispute-id'), body())),
+  'deny-dispute-offer': async () => setJsonOutput('result', await getClient().denyDisputeOffer(req('dispute-id'), body())),
+
+  // ── Vault / Payment Tokens ──────────────────────────────────────────
+  'create-setup-token': async () => setJsonOutput('result', await getClient().createSetupToken(body())),
+  'get-setup-token': async () => setJsonOutput('result', await getClient().getSetupToken(req('token-id'))),
+  'create-payment-token': async () => setJsonOutput('result', await getClient().createPaymentToken(body())),
+  'list-payment-tokens': async () => setJsonOutput('result', await getClient().listPaymentTokens(query('customer-id'))),
+  'get-payment-token': async () => setJsonOutput('result', await getClient().getPaymentToken(req('token-id'))),
+  'delete-payment-token': async () => setJsonOutput('result', await getClient().deletePaymentToken(req('token-id'))),
+
+  // ── Catalog Products ────────────────────────────────────────────────
+  'create-product': async () => setJsonOutput('result', await getClient().createProduct(body())),
+  'list-products': async () => setJsonOutput('result', await getClient().listProducts(query('page-size', 'page', 'total-required'))),
+  'get-product': async () => setJsonOutput('result', await getClient().getProduct(req('product-id'))),
+  'update-product': async () => setJsonOutput('result', await getClient().updateProduct(req('product-id'), body())),
+
+  // ── Reporting ───────────────────────────────────────────────────────
+  'search-transactions': async () => setJsonOutput('result', await getClient().searchTransactions(
+    query('start-date', 'end-date', 'transaction-id', 'transaction-type', 'transaction-status', 'transaction-amount', 'currency-code', 'page-size', 'page', 'fields'),
+  )),
+  'get-balances': async () => setJsonOutput('result', await getClient().getBalances(query('balance-date', 'currency-code'))),
+
+  // ── Webhooks ────────────────────────────────────────────────────────
+  'create-webhook': async () => setJsonOutput('result', await getClient().createWebhook(body())),
+  'list-webhooks': async () => setJsonOutput('result', await getClient().listWebhooks()),
+  'get-webhook': async () => setJsonOutput('result', await getClient().getWebhook(req('webhook-id'))),
+  'update-webhook': async () => setJsonOutput('result', await getClient().updateWebhook(req('webhook-id'), body())),
+  'delete-webhook': async () => setJsonOutput('result', await getClient().deleteWebhook(req('webhook-id'))),
+  'list-webhook-event-types': async () => setJsonOutput('result', await getClient().listWebhookEventTypes()),
+  'list-webhook-events': async () => setJsonOutput('result', await getClient().listWebhookEvents(query('start-date', 'end-date', 'page-size', 'event-type'))),
+  'get-webhook-event': async () => setJsonOutput('result', await getClient().getWebhookEvent(req('event-id'))),
+  'resend-webhook-event': async () => setJsonOutput('result', await getClient().resendWebhookEvent(req('event-id'), body())),
+  'simulate-webhook-event': async () => setJsonOutput('result', await getClient().simulateWebhookEvent(body())),
+  'verify-webhook-signature': async () => setJsonOutput('result', await getClient().verifyWebhookSignature(body())),
+
+  // ── Crypto Onramp ───────────────────────────────────────────────────
+  'create-onramp-session': async () => setJsonOutput('result', await getClient().createOnrampSession(body())),
+  'get-onramp-session': async () => setJsonOutput('result', await getClient().getOnrampSession(req('session-id'))),
+  'get-onramp-quotes': async () => setJsonOutput('result', await getClient().getOnrampQuotes(query('source-currency', 'destination-currency', 'source-amount'))),
+
+  // ── Identity ────────────────────────────────────────────────────────
+  'get-userinfo': async () => setJsonOutput('result', await getClient().getUserInfo()),
 })
 
 router()
