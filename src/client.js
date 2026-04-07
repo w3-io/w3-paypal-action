@@ -95,6 +95,10 @@ export class PayPalClient {
       },
       body: 'grant_type=client_credentials',
     })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new W3ActionError('OAUTH_FAILED', `PayPal OAuth returned ${res.status}: ${text.slice(0, 200)}`)
+    }
     const data = await res.json()
     if (!data.access_token) {
       throw new W3ActionError(

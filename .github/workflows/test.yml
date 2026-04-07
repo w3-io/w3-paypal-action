@@ -53,14 +53,8 @@ jobs:
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
 
-      - name: Get balances
-        uses: ./
-        id: balances
-        with:
-          command: get-balances
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
+      # get-balances omitted — requires reporting permissions not
+      # available in standard sandbox apps
 
       # ── Write commands ───────────────────────────────────────────────
 
