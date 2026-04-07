@@ -116,6 +116,18 @@ inputs:
   event-type:
     description: 'Webhook event type filter'
     required: false
+  session-id:
+    description: 'Crypto onramp session ID'
+    required: false
+  source-currency:
+    description: 'Source currency for onramp quotes'
+    required: false
+  destination-currency:
+    description: 'Destination currency for onramp quotes'
+    required: false
+  source-amount:
+    description: 'Source amount for onramp quotes'
+    required: false
 
 outputs:
   result:
