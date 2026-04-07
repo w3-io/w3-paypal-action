@@ -27952,8 +27952,9 @@ async function fetchWithRetry(url, opts, retries = MAX_RETRIES) {
       // Retry on 429 (rate limit) and 5xx (server error)
       if ((res.status === 429 || res.status >= 500) && attempt < retries) {
         const retryAfter = res.headers.get('retry-after')
-        const delay = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
+        const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : NaN
+        const delay = Number.isFinite(retrySeconds)
+          ? retrySeconds * 1000
           : RETRY_DELAY_MS * 2 ** attempt
         await new Promise(r => setTimeout(r, delay))
         continue
@@ -28032,7 +28033,6 @@ class PayPalClient {
     const token = await this.#authenticate()
     return {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
       Accept: 'application/json',
       ...extra,
     }
@@ -28043,10 +28043,11 @@ class PayPalClient {
   // response.json() which fails on empty bodies. This helper handles
   // all response types correctly.
   async #apiCall(method, url, headers, body) {
+    const hasBody = body !== undefined
     const res = await fetchWithRetry(url, {
       method,
-      headers,
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      headers: hasBody ? { ...headers, 'Content-Type': 'application/json' } : headers,
+      ...(hasBody ? { body: JSON.stringify(body) } : {}),
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -28055,7 +28056,11 @@ class PayPalClient {
     if (res.status === 204) return { success: true }
     const text = await res.text()
     if (!text) return { success: true }
-    try { return JSON.parse(text) } catch { return { success: true } }
+    try {
+      return JSON.parse(text)
+    } catch (e) {
+      throw new error_W3ActionError('INVALID_RESPONSE', `PayPal returned unparseable response: ${text.slice(0, 200)}`)
+    }
   }
 
   async get(path, query) {
