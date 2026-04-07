@@ -29,7 +29,6 @@ function jsonInput(name) {
 }
 
 function req(name) { return core.getInput(name, { required: true }) }
-function opt(name) { return core.getInput(name) || undefined }
 
 /** Build query params from optional inputs.
  *  Accepts [inputName, apiName] tuples for non-standard param names,

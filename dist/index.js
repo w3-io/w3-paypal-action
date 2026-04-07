@@ -27920,8 +27920,8 @@ function createMockCore() {
  * PayPal REST API client.
  *
  * Uses OAuth2 client credentials for authentication.
- * All HTTP goes through action-core's `request` which handles
- * timeout, retry on 429/5xx, and structured errors.
+ * HTTP goes through a custom `#apiCall` wrapper that handles PayPal's
+ * 204 No Content responses (DELETE, PATCH, POST activate/void).
  *
  * PayPal API docs: https://developer.paypal.com/docs/api/
  * Base URLs:
@@ -28236,7 +28236,6 @@ function jsonInput(name) {
 }
 
 function req(name) { return lib_core.getInput(name, { required: true }) }
-function opt(name) { return core.getInput(name) || undefined }
 
 /** Build query params from optional inputs.
  *  Accepts [inputName, apiName] tuples for non-standard param names,

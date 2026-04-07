@@ -2,8 +2,8 @@
  * PayPal REST API client.
  *
  * Uses OAuth2 client credentials for authentication.
- * All HTTP goes through action-core's `request` which handles
- * timeout, retry on 429/5xx, and structured errors.
+ * HTTP goes through a custom `#apiCall` wrapper that handles PayPal's
+ * 204 No Content responses (DELETE, PATCH, POST activate/void).
  *
  * PayPal API docs: https://developer.paypal.com/docs/api/
  * Base URLs:
@@ -11,7 +11,7 @@
  *   Sandbox:    https://api-m.sandbox.paypal.com
  */
 
-import { request, W3ActionError } from '@w3-io/action-core'
+import { W3ActionError } from '@w3-io/action-core'
 
 const DEFAULT_BASE_URL = 'https://api-m.paypal.com'
 
