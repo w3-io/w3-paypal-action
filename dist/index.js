@@ -28023,22 +28023,38 @@ class PayPalClient {
     })
   }
 
+  // PATCH often returns 204 No Content on success.
   async patch(path, payload) {
     const url = this.#buildUrl(path)
-    return request(url, {
+    const res = await fetch(url, {
       method: 'PATCH',
       headers: await this.#headers(),
-      body: payload,
+      body: JSON.stringify(payload),
     })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
+    }
+    if (res.status === 204) return { success: true }
+    const text = await res.text()
+    try { return JSON.parse(text) } catch { return { success: true } }
   }
 
+  // DELETE often returns 204 No Content, which request() can't parse.
+  // Use raw fetch and handle empty responses.
   async delete(path) {
     const url = this.#buildUrl(path)
-    const result = await request(url, {
+    const res = await fetch(url, {
       method: 'DELETE',
       headers: await this.#headers(),
     })
-    return result ?? { success: true }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
+    }
+    if (res.status === 204) return { success: true }
+    const text = await res.text()
+    try { return JSON.parse(text) } catch { return { success: true } }
   }
 
   #buildUrl(path, query) {
