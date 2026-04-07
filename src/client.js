@@ -79,49 +79,48 @@ export class PayPalClient {
     }
   }
 
+  // request() returns parsed JSON directly and JSON.stringify's body
+  // internally — pass objects, not strings.
+
   async get(path, query) {
     const url = this.#buildUrl(path, query)
-    const { body } = await request(url, { headers: await this.#headers() })
-    return body
+    return request(url, { headers: await this.#headers() })
   }
 
   async post(path, payload, extra) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'POST',
       headers: await this.#headers(extra),
-      ...(payload ? { body: JSON.stringify(payload) } : {}),
+      ...(payload !== undefined ? { body: payload } : {}),
     })
-    return body
   }
 
   async put(path, payload) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'PUT',
       headers: await this.#headers(),
-      body: JSON.stringify(payload),
+      body: payload,
     })
-    return body
   }
 
   async patch(path, payload) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'PATCH',
       headers: await this.#headers(),
-      body: JSON.stringify(payload),
+      body: payload,
     })
-    return body
   }
 
   async delete(path) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    const result = await request(url, {
       method: 'DELETE',
       headers: await this.#headers(),
     })
-    return body ?? { success: true }
+    return result ?? { success: true }
   }
 
   #buildUrl(path, query) {

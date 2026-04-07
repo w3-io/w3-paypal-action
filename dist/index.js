@@ -27997,49 +27997,48 @@ class PayPalClient {
     }
   }
 
+  // request() returns parsed JSON directly and JSON.stringify's body
+  // internally — pass objects, not strings.
+
   async get(path, query) {
     const url = this.#buildUrl(path, query)
-    const { body } = await request(url, { headers: await this.#headers() })
-    return body
+    return request(url, { headers: await this.#headers() })
   }
 
   async post(path, payload, extra) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'POST',
       headers: await this.#headers(extra),
-      ...(payload ? { body: JSON.stringify(payload) } : {}),
+      ...(payload !== undefined ? { body: payload } : {}),
     })
-    return body
   }
 
   async put(path, payload) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'PUT',
       headers: await this.#headers(),
-      body: JSON.stringify(payload),
+      body: payload,
     })
-    return body
   }
 
   async patch(path, payload) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    return request(url, {
       method: 'PATCH',
       headers: await this.#headers(),
-      body: JSON.stringify(payload),
+      body: payload,
     })
-    return body
   }
 
   async delete(path) {
     const url = this.#buildUrl(path)
-    const { body } = await request(url, {
+    const result = await request(url, {
       method: 'DELETE',
       headers: await this.#headers(),
     })
-    return body ?? { success: true }
+    return result ?? { success: true }
   }
 
   #buildUrl(path, query) {
@@ -28233,18 +28232,25 @@ function getClient() {
 function jsonInput(name) {
   const raw = lib_core.getInput(name)
   if (!raw) return undefined
-  try { return JSON.parse(raw) } catch { return raw }
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    throw new W3ActionError('INVALID_JSON', `Input '${name}' is not valid JSON: ${e.message}`)
+  }
 }
 
 function req(name) { return lib_core.getInput(name, { required: true }) }
+function opt(name) { return core.getInput(name) || undefined }
 
 /** Build query params from optional inputs.
- *  Converts kebab-case input names to snake_case for PayPal's API. */
-function query(...names) {
+ *  Accepts [inputName, apiName] tuples for non-standard param names,
+ *  or plain strings (kebab → snake_case). */
+function query(...specs) {
   const q = {}
-  for (const name of names) {
-    const v = lib_core.getInput(name)
-    if (v) q[name.replace(/-/g, '_')] = v
+  for (const spec of specs) {
+    const [inputName, apiName] = Array.isArray(spec) ? spec : [spec, spec.replace(/-/g, '_')]
+    const v = lib_core.getInput(inputName)
+    if (v) q[apiName] = v
   }
   return Object.keys(q).length ? q : undefined
 }
@@ -28293,7 +28299,7 @@ const router = createCommandRouter({
   'cancel-subscription': async () => setJsonOutput('result', await getClient().cancelSubscription(req('subscription-id'), jsonInput('body'))),
   'activate-subscription': async () => setJsonOutput('result', await getClient().activateSubscription(req('subscription-id'), jsonInput('body'))),
   'capture-subscription': async () => setJsonOutput('result', await getClient().captureSubscription(req('subscription-id'), jsonInput('body'))),
-  'list-subscription-transactions': async () => setJsonOutput('result', await getClient().listSubscriptionTransactions(req('subscription-id'), query('start-date', 'end-date'))),
+  'list-subscription-transactions': async () => setJsonOutput('result', await getClient().listSubscriptionTransactions(req('subscription-id'), query(['start-date', 'start_time'], ['end-date', 'end_time']))),
 
   // ── Invoicing ───────────────────────────────────────────────────────
   'create-invoice': async () => setJsonOutput('result', await getClient().createInvoice(jsonInput('body'))),
@@ -28317,7 +28323,7 @@ const router = createCommandRouter({
   'delete-invoice-template': async () => setJsonOutput('result', await getClient().deleteInvoiceTemplate(req('template-id'))),
 
   // ── Disputes ────────────────────────────────────────────────────────
-  'list-disputes': async () => setJsonOutput('result', await getClient().listDisputes(query('start-date', 'status', 'page-size'))),
+  'list-disputes': async () => setJsonOutput('result', await getClient().listDisputes(query(['start-date', 'start_time'], ['status', 'dispute_state'], 'page-size'))),
   'get-dispute': async () => setJsonOutput('result', await getClient().getDispute(req('dispute-id'))),
   'accept-dispute-claim': async () => setJsonOutput('result', await getClient().acceptDisputeClaim(req('dispute-id'), jsonInput('body'))),
   'escalate-dispute': async () => setJsonOutput('result', await getClient().escalateDispute(req('dispute-id'), jsonInput('body'))),
@@ -28346,7 +28352,7 @@ const router = createCommandRouter({
   'search-transactions': async () => setJsonOutput('result', await getClient().searchTransactions(
     query('start-date', 'end-date', 'transaction-id', 'transaction-type', 'transaction-status', 'transaction-amount', 'currency-code', 'page-size', 'page', 'fields'),
   )),
-  'get-balances': async () => setJsonOutput('result', await getClient().getBalances(query('balance-date', 'currency-code'))),
+  'get-balances': async () => setJsonOutput('result', await getClient().getBalances(query(['balance-date', 'as_of_time'], 'currency-code'))),
 
   // ── Webhooks ────────────────────────────────────────────────────────
   'create-webhook': async () => setJsonOutput('result', await getClient().createWebhook(jsonInput('body'))),
@@ -28355,7 +28361,7 @@ const router = createCommandRouter({
   'update-webhook': async () => setJsonOutput('result', await getClient().updateWebhook(req('webhook-id'), jsonInput('body'))),
   'delete-webhook': async () => setJsonOutput('result', await getClient().deleteWebhook(req('webhook-id'))),
   'list-webhook-event-types': async () => setJsonOutput('result', await getClient().listWebhookEventTypes()),
-  'list-webhook-events': async () => setJsonOutput('result', await getClient().listWebhookEvents(query('start-date', 'end-date', 'page-size', 'event-type'))),
+  'list-webhook-events': async () => setJsonOutput('result', await getClient().listWebhookEvents(query(['start-date', 'start_time'], ['end-date', 'end_time'], 'page-size', 'event-type'))),
   'get-webhook-event': async () => setJsonOutput('result', await getClient().getWebhookEvent(req('event-id'))),
   'resend-webhook-event': async () => setJsonOutput('result', await getClient().resendWebhookEvent(req('event-id'), jsonInput('body'))),
   'simulate-webhook-event': async () => setJsonOutput('result', await getClient().simulateWebhookEvent(jsonInput('body'))),
