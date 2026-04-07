@@ -36,9 +36,15 @@ export class PayPalClient {
   // ---------------------------------------------------------------------------
 
   async #authenticate() {
-    if (this.token) return this.token
+    // Return cached token if not expired (refresh 60s before actual expiry)
+    if (this.token && this.tokenExpiry && Date.now() < this.tokenExpiry - 60_000) {
+      return this.token
+    }
+
+    // OAuth uses form-encoded body, not JSON. Use raw fetch since
+    // action-core's request() always JSON.stringify's the body.
     const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')
-    const { body } = await request(`${this.baseUrl}/v1/oauth2/token`, {
+    const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -47,13 +53,15 @@ export class PayPalClient {
       },
       body: 'grant_type=client_credentials',
     })
-    if (!body.access_token) {
+    const data = await res.json()
+    if (!data.access_token) {
       throw new W3ActionError(
         'OAUTH_FAILED',
-        `PayPal OAuth failed: ${body.error_description || JSON.stringify(body)}`,
+        `PayPal OAuth failed: ${data.error_description || JSON.stringify(data)}`,
       )
     }
-    this.token = body.access_token
+    this.token = data.access_token
+    this.tokenExpiry = Date.now() + (data.expires_in || 32400) * 1000
     return this.token
   }
 
@@ -107,7 +115,7 @@ export class PayPalClient {
     return body
   }
 
-  async del(path) {
+  async delete(path) {
     const url = this.#buildUrl(path)
     const { body } = await request(url, {
       method: 'DELETE',
@@ -194,12 +202,12 @@ export class PayPalClient {
   listInvoices(q) { return this.get('/v2/invoicing/invoices', q) }
   getInvoice(id) { return this.get(`/v2/invoicing/invoices/${id}`) }
   updateInvoice(id, p) { return this.put(`/v2/invoicing/invoices/${id}`, p) }
-  deleteInvoice(id) { return this.del(`/v2/invoicing/invoices/${id}`) }
+  deleteInvoice(id) { return this.delete(`/v2/invoicing/invoices/${id}`) }
   sendInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/send`, p || {}) }
   remindInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/remind`, p || {}) }
   cancelInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/cancel`, p || {}) }
   recordInvoicePayment(id, p) { return this.post(`/v2/invoicing/invoices/${id}/payments`, p) }
-  deleteInvoicePayment(iid, pid) { return this.del(`/v2/invoicing/invoices/${iid}/payments/${pid}`) }
+  deleteInvoicePayment(iid, pid) { return this.delete(`/v2/invoicing/invoices/${iid}/payments/${pid}`) }
   recordInvoiceRefund(id, p) { return this.post(`/v2/invoicing/invoices/${id}/refunds`, p) }
   generateInvoiceQr(id, p) { return this.post(`/v2/invoicing/invoices/${id}/generate-qr-code`, p || { width: 400, height: 400 }) }
   generateInvoiceNumber() { return this.post('/v2/invoicing/generate-next-invoice-number', {}) }
@@ -208,7 +216,7 @@ export class PayPalClient {
   createInvoiceTemplate(p) { return this.post('/v2/invoicing/templates', p) }
   getInvoiceTemplate(id) { return this.get(`/v2/invoicing/templates/${id}`) }
   updateInvoiceTemplate(id, p) { return this.put(`/v2/invoicing/templates/${id}`, p) }
-  deleteInvoiceTemplate(id) { return this.del(`/v2/invoicing/templates/${id}`) }
+  deleteInvoiceTemplate(id) { return this.delete(`/v2/invoicing/templates/${id}`) }
 
   // ---------------------------------------------------------------------------
   // Disputes
@@ -234,7 +242,7 @@ export class PayPalClient {
   createPaymentToken(p) { return this.post('/v3/vault/payment-tokens', p) }
   listPaymentTokens(q) { return this.get('/v3/vault/payment-tokens', q) }
   getPaymentToken(id) { return this.get(`/v3/vault/payment-tokens/${id}`) }
-  deletePaymentToken(id) { return this.del(`/v3/vault/payment-tokens/${id}`) }
+  deletePaymentToken(id) { return this.delete(`/v3/vault/payment-tokens/${id}`) }
 
   // ---------------------------------------------------------------------------
   // Catalog Products
@@ -260,7 +268,7 @@ export class PayPalClient {
   listWebhooks() { return this.get('/v1/notifications/webhooks') }
   getWebhook(id) { return this.get(`/v1/notifications/webhooks/${id}`) }
   updateWebhook(id, p) { return this.patch(`/v1/notifications/webhooks/${id}`, p) }
-  deleteWebhook(id) { return this.del(`/v1/notifications/webhooks/${id}`) }
+  deleteWebhook(id) { return this.delete(`/v1/notifications/webhooks/${id}`) }
   listWebhookEventTypes() { return this.get('/v1/notifications/webhooks-event-types') }
   listWebhookEvents(q) { return this.get('/v1/notifications/webhooks-events', q) }
   getWebhookEvent(id) { return this.get(`/v1/notifications/webhooks-events/${id}`) }
