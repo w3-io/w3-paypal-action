@@ -27545,7 +27545,7 @@ function setOutputs(outputs) {
 /**
  * Structured error with code, message, and optional details.
  */
-class W3ActionError extends Error {
+class error_W3ActionError extends Error {
     code;
     statusCode;
     details;
@@ -27564,7 +27564,7 @@ class W3ActionError extends Error {
  *   main().catch(handleError);
  */
 function handleError(error) {
-    if (error instanceof W3ActionError) {
+    if (error instanceof error_W3ActionError) {
         lib_core.setOutput("error-code", error.code);
         if (error.statusCode)
             lib_core.setOutput("status-code", error.statusCode);
@@ -27696,10 +27696,10 @@ async function bridgeRequest(path, body) {
                     if (!res.statusCode || res.statusCode >= 400) {
                         try {
                             const err = JSON.parse(data);
-                            reject(new W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
+                            reject(new error_W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
                         }
                         catch {
-                            reject(new W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
+                            reject(new error_W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
                         }
                         return;
                     }
@@ -27711,7 +27711,7 @@ async function bridgeRequest(path, body) {
                     }
                 });
             });
-            req.on("error", (err) => reject(new W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
+            req.on("error", (err) => reject(new error_W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
             if (payload)
                 req.write(payload);
             req.end();
@@ -27734,7 +27734,7 @@ async function bridgeRequest(path, body) {
         catch {
             // not JSON
         }
-        throw new W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
+        throw new error_W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
     }
     try {
         return JSON.parse(text);
@@ -27941,8 +27941,8 @@ class PayPalClient {
    * @param {string} [opts.baseUrl]
    */
   constructor({ clientId, clientSecret, baseUrl = DEFAULT_BASE_URL } = {}) {
-    if (!clientId) throw new W3ActionError('MISSING_CLIENT_ID', 'PayPal Client ID is required')
-    if (!clientSecret) throw new W3ActionError('MISSING_CLIENT_SECRET', 'PayPal Client Secret is required')
+    if (!clientId) throw new error_W3ActionError('MISSING_CLIENT_ID', 'PayPal Client ID is required')
+    if (!clientSecret) throw new error_W3ActionError('MISSING_CLIENT_SECRET', 'PayPal Client Secret is required')
     this.clientId = clientId
     this.clientSecret = clientSecret
     this.baseUrl = baseUrl.replace(/\/+$/, '')
@@ -27973,7 +27973,7 @@ class PayPalClient {
     })
     const data = await res.json()
     if (!data.access_token) {
-      throw new W3ActionError(
+      throw new error_W3ActionError(
         'OAUTH_FAILED',
         `PayPal OAuth failed: ${data.error_description || JSON.stringify(data)}`,
       )
@@ -27997,64 +27997,44 @@ class PayPalClient {
     }
   }
 
-  // request() returns parsed JSON directly and JSON.stringify's body
-  // internally — pass objects, not strings.
+  // PayPal returns 204 No Content for many mutations (DELETE, PATCH,
+  // POST activate/deactivate/void). action-core's request() calls
+  // response.json() which fails on empty bodies. This helper handles
+  // all response types correctly.
+  async #apiCall(method, url, headers, body) {
+    const res = await fetch(url, {
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new error_W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
+    }
+    if (res.status === 204) return { success: true }
+    const text = await res.text()
+    if (!text) return { success: true }
+    try { return JSON.parse(text) } catch { return { success: true } }
+  }
 
   async get(path, query) {
-    const url = this.#buildUrl(path, query)
-    return request(url, { headers: await this.#headers() })
+    return this.#apiCall('GET', this.#buildUrl(path, query), await this.#headers())
   }
 
   async post(path, payload, extra) {
-    const url = this.#buildUrl(path)
-    return request(url, {
-      method: 'POST',
-      headers: await this.#headers(extra),
-      ...(payload !== undefined ? { body: payload } : {}),
-    })
+    return this.#apiCall('POST', this.#buildUrl(path), await this.#headers(extra), payload)
   }
 
   async put(path, payload) {
-    const url = this.#buildUrl(path)
-    return request(url, {
-      method: 'PUT',
-      headers: await this.#headers(),
-      body: payload,
-    })
+    return this.#apiCall('PUT', this.#buildUrl(path), await this.#headers(), payload)
   }
 
-  // PATCH often returns 204 No Content on success.
   async patch(path, payload) {
-    const url = this.#buildUrl(path)
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: await this.#headers(),
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
-    }
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    try { return JSON.parse(text) } catch { return { success: true } }
+    return this.#apiCall('PATCH', this.#buildUrl(path), await this.#headers(), payload)
   }
 
-  // DELETE often returns 204 No Content, which request() can't parse.
-  // Use raw fetch and handle empty responses.
   async delete(path) {
-    const url = this.#buildUrl(path)
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: await this.#headers(),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
-    }
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    try { return JSON.parse(text) } catch { return { success: true } }
+    return this.#apiCall('DELETE', this.#buildUrl(path), await this.#headers())
   }
 
   #buildUrl(path, query) {
@@ -28251,7 +28231,7 @@ function jsonInput(name) {
   try {
     return JSON.parse(raw)
   } catch (e) {
-    throw new W3ActionError('INVALID_JSON', `Input '${name}' is not valid JSON: ${e.message}`)
+    throw new error_W3ActionError('INVALID_JSON', `Input '${name}' is not valid JSON: ${e.message}`)
   }
 }
 

@@ -79,64 +79,44 @@ export class PayPalClient {
     }
   }
 
-  // request() returns parsed JSON directly and JSON.stringify's body
-  // internally — pass objects, not strings.
+  // PayPal returns 204 No Content for many mutations (DELETE, PATCH,
+  // POST activate/deactivate/void). action-core's request() calls
+  // response.json() which fails on empty bodies. This helper handles
+  // all response types correctly.
+  async #apiCall(method, url, headers, body) {
+    const res = await fetch(url, {
+      method,
+      headers,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
+    }
+    if (res.status === 204) return { success: true }
+    const text = await res.text()
+    if (!text) return { success: true }
+    try { return JSON.parse(text) } catch { return { success: true } }
+  }
 
   async get(path, query) {
-    const url = this.#buildUrl(path, query)
-    return request(url, { headers: await this.#headers() })
+    return this.#apiCall('GET', this.#buildUrl(path, query), await this.#headers())
   }
 
   async post(path, payload, extra) {
-    const url = this.#buildUrl(path)
-    return request(url, {
-      method: 'POST',
-      headers: await this.#headers(extra),
-      ...(payload !== undefined ? { body: payload } : {}),
-    })
+    return this.#apiCall('POST', this.#buildUrl(path), await this.#headers(extra), payload)
   }
 
   async put(path, payload) {
-    const url = this.#buildUrl(path)
-    return request(url, {
-      method: 'PUT',
-      headers: await this.#headers(),
-      body: payload,
-    })
+    return this.#apiCall('PUT', this.#buildUrl(path), await this.#headers(), payload)
   }
 
-  // PATCH often returns 204 No Content on success.
   async patch(path, payload) {
-    const url = this.#buildUrl(path)
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: await this.#headers(),
-      body: JSON.stringify(payload),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
-    }
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    try { return JSON.parse(text) } catch { return { success: true } }
+    return this.#apiCall('PATCH', this.#buildUrl(path), await this.#headers(), payload)
   }
 
-  // DELETE often returns 204 No Content, which request() can't parse.
-  // Use raw fetch and handle empty responses.
   async delete(path) {
-    const url = this.#buildUrl(path)
-    const res = await fetch(url, {
-      method: 'DELETE',
-      headers: await this.#headers(),
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
-    }
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    try { return JSON.parse(text) } catch { return { success: true } }
+    return this.#apiCall('DELETE', this.#buildUrl(path), await this.#headers())
   }
 
   #buildUrl(path, query) {
