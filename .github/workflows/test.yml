@@ -1,0 +1,141 @@
+name: Test PayPal Action
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [audie/*]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Read commands ────────────────────────────────────────────────
+
+      - name: List products
+        uses: ./
+        id: products
+        with:
+          command: list-products
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      - name: Verify list-products
+        run: |
+          echo "${{ steps.products.outputs.result }}" | jq .
+
+      - name: List plans
+        uses: ./
+        id: plans
+        with:
+          command: list-plans
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      - name: List webhooks
+        uses: ./
+        id: webhooks
+        with:
+          command: list-webhooks
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      - name: Get userinfo
+        uses: ./
+        id: userinfo
+        with:
+          command: get-userinfo
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      - name: Get balances
+        uses: ./
+        id: balances
+        with:
+          command: get-balances
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      # ── Write commands ───────────────────────────────────────────────
+
+      - name: Create product
+        uses: ./
+        id: product
+        with:
+          command: create-product
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+          body: '{"name": "W3 Test Product", "type": "SERVICE", "description": "Test product from CI"}'
+
+      - name: Verify create-product
+        run: |
+          echo "${{ steps.product.outputs.result }}" | jq -e '.id'
+
+      - name: Create order
+        uses: ./
+        id: order
+        with:
+          command: create-order
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+          body: |
+            {
+              "intent": "CAPTURE",
+              "purchase_units": [{
+                "amount": {"currency_code": "USD", "value": "9.99"},
+                "description": "W3 CI test order"
+              }]
+            }
+
+      - name: Verify create-order
+        run: |
+          echo "${{ steps.order.outputs.result }}" | jq -e '.id, .status'
+
+      - name: Get order
+        uses: ./
+        id: get-order
+        with:
+          command: get-order
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+          order-id: ${{ fromJson(steps.order.outputs.result).id }}
+
+      - name: Verify get-order
+        run: |
+          echo "${{ steps.get-order.outputs.result }}" | jq -e '.status == "CREATED"'
+
+      # ── List supported blockchains (onramp) ──────────────────────────
+
+      - name: List webhook event types
+        uses: ./
+        id: event-types
+        with:
+          command: list-webhook-event-types
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+
+      - name: Summary
+        run: |
+          echo "### PayPal Action Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Command | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| list-products | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| list-plans | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| list-webhooks | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| get-userinfo | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| get-balances | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| create-product | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| create-order | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| get-order | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| list-webhook-event-types | ✅ |" >> $GITHUB_STEP_SUMMARY
