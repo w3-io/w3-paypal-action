@@ -2,8 +2,8 @@
  * PayPal REST API client.
  *
  * Uses OAuth2 client credentials for authentication.
- * HTTP goes through a custom `#apiCall` wrapper that handles PayPal's
- * 204 No Content responses (DELETE, PATCH, POST activate/void).
+ * HTTP goes through `#apiCall` with retry on 429/5xx, 30s timeout,
+ * and 204 No Content handling for PayPal's mutation responses.
  *
  * PayPal API docs: https://developer.paypal.com/docs/api/
  * Base URLs:
@@ -14,6 +14,47 @@
 import { W3ActionError } from '@w3-io/action-core'
 
 const DEFAULT_BASE_URL = 'https://api-m.paypal.com'
+const DEFAULT_TIMEOUT_MS = 30_000
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1000
+
+/**
+ * Fetch with timeout, retry on 429/5xx, and exponential backoff.
+ * Returns the raw Response — caller handles body parsing.
+ */
+async function fetchWithRetry(url, opts, retries = MAX_RETRIES) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+
+    try {
+      const res = await fetch(url, { ...opts, signal: controller.signal })
+      clearTimeout(timer)
+
+      // Retry on 429 (rate limit) and 5xx (server error)
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        const retryAfter = res.headers.get('retry-after')
+        const delay = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : RETRY_DELAY_MS * 2 ** attempt
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+
+      return res
+    } catch (e) {
+      clearTimeout(timer)
+      if (attempt < retries && (e.name === 'AbortError' || e.code === 'UND_ERR_CONNECT_TIMEOUT')) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * 2 ** attempt))
+        continue
+      }
+      if (e.name === 'AbortError') {
+        throw new W3ActionError('TIMEOUT', `Request timed out after ${DEFAULT_TIMEOUT_MS}ms: ${url}`)
+      }
+      throw e
+    }
+  }
+}
 
 export class PayPalClient {
   /**
@@ -44,7 +85,7 @@ export class PayPalClient {
     // OAuth uses form-encoded body, not JSON. Use raw fetch since
     // action-core's request() always JSON.stringify's the body.
     const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')
-    const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
+    const res = await fetchWithRetry(`${this.baseUrl}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -84,7 +125,7 @@ export class PayPalClient {
   // response.json() which fails on empty bodies. This helper handles
   // all response types correctly.
   async #apiCall(method, url, headers, body) {
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method,
       headers,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
