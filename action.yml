@@ -15,7 +15,7 @@ inputs:
   api-url:
     description: 'PayPal API base URL'
     required: false
-    default: 'https://api-m.sandbox.paypal.com'
+    default: 'https://api-m.paypal.com'
   body:
     description: 'Request body as JSON (for create/update operations)'
     required: false
@@ -115,6 +115,18 @@ inputs:
     required: false
   event-type:
     description: 'Webhook event type filter'
+    required: false
+  session-id:
+    description: 'Crypto onramp session ID'
+    required: false
+  source-currency:
+    description: 'Source currency for onramp quotes'
+    required: false
+  destination-currency:
+    description: 'Destination currency for onramp quotes'
+    required: false
+  source-amount:
+    description: 'Source amount for onramp quotes'
     required: false
 
 outputs:

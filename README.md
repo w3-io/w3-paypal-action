@@ -1,25 +1,6 @@
 # W3 PayPal Action
 
-PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and reporting for W3 workflows.
-
-## Quick Start
-
-```yaml
-- uses: w3/paypal@v1
-  id: order
-  with:
-    command: create-order
-    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-    body: |
-      {
-        "intent": "CAPTURE",
-        "purchase_units": [{
-          "amount": {"currency_code": "USD", "value": "99.99"},
-          "description": "Premium Plan"
-        }]
-      }
-```
+Complete PayPal API for W3 workflows. 91 commands covering orders, payments, payouts, subscriptions, invoicing, disputes, vault, catalog products, reporting, webhooks, crypto onramp, and identity.
 
 ## Commands
 
@@ -165,6 +146,14 @@ PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and
 | `simulate-webhook-event` | Simulate event (sandbox) |
 | `verify-webhook-signature` | Verify webhook authenticity |
 
+### Crypto Onramp (3)
+
+| Command | Description |
+|---------|-------------|
+| `create-onramp-session` | Create a crypto purchase session |
+| `get-onramp-session` | Get onramp session status |
+| `get-onramp-quotes` | Get crypto purchase quotes |
+
 ### Identity (1)
 
 | Command | Description |
@@ -213,11 +202,105 @@ PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and
 | `transaction-amount` | No | | Transaction amount filter |
 | `event-type` | No | | Webhook event type filter |
 
-## Outputs
+```yaml
+- uses: w3-io/w3-paypal-action@v1
+  id: order
+  with:
+    command: create-order
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: |
+      {
+        "intent": "CAPTURE",
+        "purchase_units": [{
+          "amount": {"currency_code": "USD", "value": "99.99"},
+          "description": "Premium Plan"
+        }]
+      }
+```
 
-| Name | Description |
-|------|-------------|
-| `result` | Command result as JSON string |
+### Send a Payout
+
+```yaml
+- uses: w3-io/w3-paypal-action@v1
+  with:
+    command: create-payout
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: |
+      {
+        "sender_batch_header": {
+          "sender_batch_id": "batch-${{ github.run_id }}",
+          "email_subject": "You have a payment"
+        },
+        "items": [{
+          "recipient_type": "EMAIL",
+          "amount": {"value": "50.00", "currency": "USD"},
+          "receiver": "recipient@example.com"
+        }]
+      }
+```
+
+### Create and Send an Invoice
+
+```yaml
+- uses: w3-io/w3-paypal-action@v1
+  id: invoice
+  with:
+    command: create-invoice
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: |
+      {
+        "detail": {
+          "currency_code": "USD",
+          "invoice_number": "INV-001",
+          "payment_term": {"term_type": "NET_30"}
+        },
+        "primary_recipients": [{"billing_info": {"email_address": "client@example.com"}}],
+        "items": [{"name": "Consulting", "quantity": "10", "unit_amount": {"currency_code": "USD", "value": "150.00"}}]
+      }
+
+- uses: w3-io/w3-paypal-action@v1
+  with:
+    command: send-invoice
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    invoice-id: INV2-XXXX-XXXX-XXXX-XXXX
+```
+
+### Recurring Subscription
+
+```yaml
+# Create a product
+- uses: w3-io/w3-paypal-action@v1
+  id: product
+  with:
+    command: create-product
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: '{"name": "SaaS Platform", "type": "SERVICE"}'
+
+# Create a billing plan
+- uses: w3-io/w3-paypal-action@v1
+  id: plan
+  with:
+    command: create-plan
+    client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+    client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    body: |
+      {
+        "product_id": "${{ fromJson(steps.product.outputs.result).id }}",
+        "name": "Monthly Pro",
+        "billing_cycles": [{
+          "frequency": {"interval_unit": "MONTH", "interval_count": 1},
+          "tenure_type": "REGULAR",
+          "sequence": 1,
+          "pricing_scheme": {"fixed_price": {"value": "29.99", "currency_code": "USD"}}
+        }],
+        "payment_preferences": {"auto_bill_outstanding": true}
+      }
+```
 
 ## Authentication
 
@@ -225,7 +308,7 @@ PayPal uses OAuth2. The action automatically exchanges your Client ID and Secret
 
 | Environment | URL |
 |-------------|-----|
-| Sandbox | `https://api-m.sandbox.paypal.com` (default) |
-| Production | `https://api-m.paypal.com` |
+| Production | `https://api-m.paypal.com` (default) |
+| Sandbox | `https://api-m.sandbox.paypal.com` |
 
 PYUSD (PayPal's stablecoin) is a standard ERC-20 (Ethereum) and SPL (Solana) token. There is no PayPal REST API for PYUSD -- interact with it using the W3 bridge SDK's Ethereum or Solana syscalls.
