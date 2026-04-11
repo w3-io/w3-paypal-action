@@ -27653,8 +27653,17 @@ function createCommandRouter(commands) {
  *   - $W3_BRIDGE_URL    → TCP URL (macOS Docker Desktop fallback)
  *
  * Usage:
- *   import { bridge } from "@w3-io/action-core";
+ *   import { bridge, ethereum } from "@w3-io/action-core";
  *
+ *   // Typed helpers (recommended — autocomplete + type checking):
+ *   const receipt = await ethereum.callContract({
+ *     contract: "0x...",
+ *     method: "deposit(uint256)",
+ *     args: ["1000000"],
+ *     gasMultiplier: "1.5",
+ *   });
+ *
+ *   // Generic (full control):
  *   const balance = await bridge.chain("ethereum", "get-balance", {
  *     address: "0x...",
  *   });
@@ -27744,7 +27753,17 @@ async function bridgeRequest(path, body) {
     }
 }
 // ---------------------------------------------------------------------------
-// Public API
+// Internal helpers
+// ---------------------------------------------------------------------------
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function chainRequest(chainName, action, params, network) {
+    return bridgeRequest(`/${chainName}/${action}`, {
+        network: network ?? chainName,
+        params,
+    });
+}
+// ---------------------------------------------------------------------------
+// Public API — generic
 // ---------------------------------------------------------------------------
 async function health() {
     try {
@@ -27755,22 +27774,82 @@ async function health() {
         return false;
     }
 }
+/**
+ * Execute a chain operation.
+ *
+ * For type-safe calls, use the typed helpers (`ethereum`, `solana`,
+ * `bitcoin`) instead. This generic method accepts any params.
+ */
 async function chain(chainName, action, params, network) {
-    return (await bridgeRequest(`/${chainName}/${action}`, {
-        network: network ?? chainName,
-        params,
-    }));
+    return chainRequest(chainName, action, params, network);
 }
 async function bridge_crypto(action, params) {
     return (await bridgeRequest(`/crypto/${action}`, {
         params,
     }));
 }
+// ---------------------------------------------------------------------------
+// Public API — typed chain helpers
+// ---------------------------------------------------------------------------
+/** Typed Ethereum operations. */
+const ethereum = {
+    getBalance: (params, network) => chainRequest("ethereum", "get-balance", params, network),
+    readContract: (params, network) => chainRequest("ethereum", "read-contract", params, network),
+    callContract: (params, network) => chainRequest("ethereum", "call-contract", params, network),
+    transfer: (params, network) => chainRequest("ethereum", "transfer", params, network),
+    sendTransaction: (params, network) => chainRequest("ethereum", "send-transaction", params, network),
+    deployContract: (params, network) => chainRequest("ethereum", "deploy-contract", params, network),
+    transferToken: (params, network) => chainRequest("ethereum", "transfer-token", params, network),
+    approveToken: (params, network) => chainRequest("ethereum", "approve-token", params, network),
+    transferNft: (params, network) => chainRequest("ethereum", "transfer-nft", params, network),
+    getTransaction: (params, network) => chainRequest("ethereum", "get-transaction", params, network),
+    waitForTransaction: (params, network) => chainRequest("ethereum", "wait-for-transaction", params, network),
+    getEvents: (params, network) => chainRequest("ethereum", "get-events", params, network),
+    resolveName: (params, network) => chainRequest("ethereum", "resolve-name", params, network),
+    getTokenBalance: (params, network) => chainRequest("ethereum", "get-token-balance", params, network),
+    getTokenAllowance: (params, network) => chainRequest("ethereum", "get-token-allowance", params, network),
+    getNftOwner: (params, network) => chainRequest("ethereum", "get-nft-owner", params, network),
+    getNftMetadata: (params, network) => chainRequest("ethereum", "get-nft-metadata", params, network),
+};
+/** Typed Solana operations. */
+const solana = {
+    getBalance: (params, network) => chainRequest("solana", "get-balance", params, network),
+    transfer: (params, network) => chainRequest("solana", "transfer", params, network),
+    transferToken: (params, network) => chainRequest("solana", "transfer-token", params, network),
+    callProgram: (params, network) => chainRequest("solana", "call-program", params, network),
+    getAccount: (params, network) => chainRequest("solana", "get-account", params, network),
+    getTokenBalance: (params, network) => chainRequest("solana", "get-token-balance", params, network),
+    getTokenAccounts: (params, network) => chainRequest("solana", "get-token-accounts", params, network),
+    getTransaction: (params, network) => chainRequest("solana", "get-transaction", params, network),
+    waitForTransaction: (params, network) => chainRequest("solana", "wait-for-transaction", params, network),
+    /** Generate an ephemeral keypair for use as an additional signer. */
+    generateKeypair: () => bridgeRequest("/solana/generate-keypair", {}),
+    /** Get the payer's public key (no secret exposed). */
+    payerAddress: () => bridgeRequest("/solana/payer-address"),
+};
+/** Typed Bitcoin operations. */
+const bitcoin = {
+    getBalance: (params, network) => chainRequest("bitcoin", "get-balance", params, network),
+    send: (params, network) => chainRequest("bitcoin", "send", params, network),
+    getUtxos: (params, network) => chainRequest("bitcoin", "get-utxos", params, network),
+    getTransaction: (params, network) => chainRequest("bitcoin", "get-transaction", params, network),
+    getFeeRate: (params, network) => chainRequest("bitcoin", "get-fee-rate", params ?? {}, network),
+    waitForTransaction: (params, network) => chainRequest("bitcoin", "wait-for-transaction", params, network),
+};
+// ---------------------------------------------------------------------------
+// Default export
+// ---------------------------------------------------------------------------
 /**
  * The bridge client.
  *
- *   import { bridge } from "@w3-io/action-core";
+ *   import { bridge, ethereum, solana, bitcoin } from "@w3-io/action-core";
  *
+ *   // Typed (recommended):
+ *   const receipt = await ethereum.callContract({ contract, method, args });
+ *   const sig = await solana.callProgram({ programId, accounts, data });
+ *   const tx = await bitcoin.send({ to, amount });
+ *
+ *   // Generic:
  *   const bal = await bridge.chain("ethereum", "get-balance", { address });
  *   const hash = await bridge.crypto("keccak-256", { data: "0x..." });
  *   const ok = await bridge.health();
@@ -27931,10 +28010,10 @@ function createMockCore() {
 
 
 
-const DEFAULT_BASE_URL = 'https://api-m.paypal.com'
-const DEFAULT_TIMEOUT_MS = 30_000
-const MAX_RETRIES = 3
-const RETRY_DELAY_MS = 1000
+const DEFAULT_BASE_URL = "https://api-m.paypal.com";
+const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 /**
  * Fetch with timeout, retry on 429/5xx, and exponential backoff.
@@ -27942,35 +28021,41 @@ const RETRY_DELAY_MS = 1000
  */
 async function fetchWithRetry(url, opts, retries = MAX_RETRIES) {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
     try {
-      const res = await fetch(url, { ...opts, signal: controller.signal })
-      clearTimeout(timer)
+      const res = await fetch(url, { ...opts, signal: controller.signal });
+      clearTimeout(timer);
 
       // Retry on 429 (rate limit) and 5xx (server error)
       if ((res.status === 429 || res.status >= 500) && attempt < retries) {
-        const retryAfter = res.headers.get('retry-after')
-        const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : NaN
+        const retryAfter = res.headers.get("retry-after");
+        const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : NaN;
         const delay = Number.isFinite(retrySeconds)
           ? retrySeconds * 1000
-          : RETRY_DELAY_MS * 2 ** attempt
-        await new Promise(r => setTimeout(r, delay))
-        continue
+          : RETRY_DELAY_MS * 2 ** attempt;
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
       }
 
-      return res
+      return res;
     } catch (e) {
-      clearTimeout(timer)
-      if (attempt < retries && (e.name === 'AbortError' || e.code === 'UND_ERR_CONNECT_TIMEOUT')) {
-        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * 2 ** attempt))
-        continue
+      clearTimeout(timer);
+      if (
+        attempt < retries &&
+        (e.name === "AbortError" || e.code === "UND_ERR_CONNECT_TIMEOUT")
+      ) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * 2 ** attempt));
+        continue;
       }
-      if (e.name === 'AbortError') {
-        throw new error_W3ActionError('TIMEOUT', `Request timed out after ${DEFAULT_TIMEOUT_MS}ms: ${url}`)
+      if (e.name === "AbortError") {
+        throw new error_W3ActionError(
+          "TIMEOUT",
+          `Request timed out after ${DEFAULT_TIMEOUT_MS}ms: ${url}`,
+        );
       }
-      throw e
+      throw e;
     }
   }
 }
@@ -27983,12 +28068,20 @@ class PayPalClient {
    * @param {string} [opts.baseUrl]
    */
   constructor({ clientId, clientSecret, baseUrl = DEFAULT_BASE_URL } = {}) {
-    if (!clientId) throw new error_W3ActionError('MISSING_CLIENT_ID', 'PayPal Client ID is required')
-    if (!clientSecret) throw new error_W3ActionError('MISSING_CLIENT_SECRET', 'PayPal Client Secret is required')
-    this.clientId = clientId
-    this.clientSecret = clientSecret
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
-    this.token = null
+    if (!clientId)
+      throw new error_W3ActionError(
+        "MISSING_CLIENT_ID",
+        "PayPal Client ID is required",
+      );
+    if (!clientSecret)
+      throw new error_W3ActionError(
+        "MISSING_CLIENT_SECRET",
+        "PayPal Client Secret is required",
+      );
+    this.clientId = clientId;
+    this.clientSecret = clientSecret;
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.token = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -27997,36 +28090,45 @@ class PayPalClient {
 
   async #authenticate() {
     // Return cached token if not expired (refresh 60s before actual expiry)
-    if (this.token && this.tokenExpiry && Date.now() < this.tokenExpiry - 60_000) {
-      return this.token
+    if (
+      this.token &&
+      this.tokenExpiry &&
+      Date.now() < this.tokenExpiry - 60_000
+    ) {
+      return this.token;
     }
 
     // OAuth uses form-encoded body, not JSON. Use raw fetch since
     // action-core's request() always JSON.stringify's the body.
-    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')
+    const credentials = Buffer.from(
+      `${this.clientId}:${this.clientSecret}`,
+    ).toString("base64");
     const res = await fetchWithRetry(`${this.baseUrl}/v1/oauth2/token`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
       },
-      body: 'grant_type=client_credentials',
-    })
+      body: "grant_type=client_credentials",
+    });
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new error_W3ActionError('OAUTH_FAILED', `PayPal OAuth returned ${res.status}: ${text.slice(0, 200)}`)
+      const text = await res.text().catch(() => "");
+      throw new error_W3ActionError(
+        "OAUTH_FAILED",
+        `PayPal OAuth returned ${res.status}: ${text.slice(0, 200)}`,
+      );
     }
-    const data = await res.json()
+    const data = await res.json();
     if (!data.access_token) {
       throw new error_W3ActionError(
-        'OAUTH_FAILED',
+        "OAUTH_FAILED",
         `PayPal OAuth failed: ${data.error_description || JSON.stringify(data)}`,
-      )
+      );
     }
-    this.token = data.access_token
-    this.tokenExpiry = Date.now() + (data.expires_in || 32400) * 1000
-    return this.token
+    this.token = data.access_token;
+    this.tokenExpiry = Date.now() + (data.expires_in || 32400) * 1000;
+    return this.token;
   }
 
   // ---------------------------------------------------------------------------
@@ -28034,12 +28136,12 @@ class PayPalClient {
   // ---------------------------------------------------------------------------
 
   async #headers(extra) {
-    const token = await this.#authenticate()
+    const token = await this.#authenticate();
     return {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
+      Accept: "application/json",
       ...extra,
-    }
+    };
   }
 
   // PayPal returns 204 No Content for many mutations (DELETE, PATCH,
@@ -28047,211 +28149,435 @@ class PayPalClient {
   // response.json() which fails on empty bodies. This helper handles
   // all response types correctly.
   async #apiCall(method, url, headers, body) {
-    const hasBody = body !== undefined
+    const hasBody = body !== undefined;
     const res = await fetchWithRetry(url, {
       method,
-      headers: hasBody ? { ...headers, 'Content-Type': 'application/json' } : headers,
+      headers: hasBody
+        ? { ...headers, "Content-Type": "application/json" }
+        : headers,
       ...(hasBody ? { body: JSON.stringify(body) } : {}),
-    })
+    });
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
-      throw new error_W3ActionError('HTTP_ERROR', `${res.status}: ${text}`, { statusCode: res.status })
+      const text = await res.text().catch(() => "");
+      throw new error_W3ActionError("HTTP_ERROR", `${res.status}: ${text}`, {
+        statusCode: res.status,
+      });
     }
-    if (res.status === 204) return { success: true }
-    const text = await res.text()
-    if (!text) return { success: true }
+    if (res.status === 204) return { success: true };
+    const text = await res.text();
+    if (!text) return { success: true };
     try {
-      return JSON.parse(text)
-    } catch (e) {
-      throw new error_W3ActionError('INVALID_RESPONSE', `PayPal returned unparseable response: ${text.slice(0, 200)}`)
+      return JSON.parse(text);
+    } catch {
+      throw new error_W3ActionError(
+        "INVALID_RESPONSE",
+        `PayPal returned unparseable response: ${text.slice(0, 200)}`,
+      );
     }
   }
 
   async get(path, query) {
-    return this.#apiCall('GET', this.#buildUrl(path, query), await this.#headers())
+    return this.#apiCall(
+      "GET",
+      this.#buildUrl(path, query),
+      await this.#headers(),
+    );
   }
 
   async post(path, payload, extra) {
-    return this.#apiCall('POST', this.#buildUrl(path), await this.#headers(extra), payload)
+    return this.#apiCall(
+      "POST",
+      this.#buildUrl(path),
+      await this.#headers(extra),
+      payload,
+    );
   }
 
   async put(path, payload) {
-    return this.#apiCall('PUT', this.#buildUrl(path), await this.#headers(), payload)
+    return this.#apiCall(
+      "PUT",
+      this.#buildUrl(path),
+      await this.#headers(),
+      payload,
+    );
   }
 
   async patch(path, payload) {
-    return this.#apiCall('PATCH', this.#buildUrl(path), await this.#headers(), payload)
+    return this.#apiCall(
+      "PATCH",
+      this.#buildUrl(path),
+      await this.#headers(),
+      payload,
+    );
   }
 
   async delete(path) {
-    return this.#apiCall('DELETE', this.#buildUrl(path), await this.#headers())
+    return this.#apiCall("DELETE", this.#buildUrl(path), await this.#headers());
   }
 
   #buildUrl(path, query) {
-    const url = new URL(path, this.baseUrl)
+    const url = new URL(path, this.baseUrl);
     if (query) {
       for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v))
+        if (v !== undefined && v !== null && v !== "")
+          url.searchParams.set(k, String(v));
       }
     }
-    return url.toString()
+    return url.toString();
   }
 
   // ---------------------------------------------------------------------------
   // Orders
   // ---------------------------------------------------------------------------
 
-  createOrder(p) { return this.post('/v2/checkout/orders', p) }
-  getOrder(id) { return this.get(`/v2/checkout/orders/${id}`) }
-  updateOrder(id, p) { return this.patch(`/v2/checkout/orders/${id}`, p) }
-  authorizeOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/authorize`, p || {}) }
-  captureOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/capture`, p || {}) }
-  confirmOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/confirm-payment-source`, p) }
-  trackOrder(id, p) { return this.post(`/v2/checkout/orders/${id}/track`, p) }
-  updateOrderTracking(oid, tid, p) { return this.patch(`/v2/checkout/orders/${oid}/trackers/${tid}`, p) }
+  createOrder(p) {
+    return this.post("/v2/checkout/orders", p);
+  }
+  getOrder(id) {
+    return this.get(`/v2/checkout/orders/${id}`);
+  }
+  updateOrder(id, p) {
+    return this.patch(`/v2/checkout/orders/${id}`, p);
+  }
+  authorizeOrder(id, p) {
+    return this.post(`/v2/checkout/orders/${id}/authorize`, p || {});
+  }
+  captureOrder(id, p) {
+    return this.post(`/v2/checkout/orders/${id}/capture`, p || {});
+  }
+  confirmOrder(id, p) {
+    return this.post(`/v2/checkout/orders/${id}/confirm-payment-source`, p);
+  }
+  trackOrder(id, p) {
+    return this.post(`/v2/checkout/orders/${id}/track`, p);
+  }
+  updateOrderTracking(oid, tid, p) {
+    return this.patch(`/v2/checkout/orders/${oid}/trackers/${tid}`, p);
+  }
 
   // ---------------------------------------------------------------------------
   // Payments
   // ---------------------------------------------------------------------------
 
-  getAuthorization(id) { return this.get(`/v2/payments/authorizations/${id}`) }
-  captureAuthorization(id, p) { return this.post(`/v2/payments/authorizations/${id}/capture`, p || {}) }
-  reauthorize(id, p) { return this.post(`/v2/payments/authorizations/${id}/reauthorize`, p || {}) }
-  voidAuthorization(id) { return this.post(`/v2/payments/authorizations/${id}/void`) }
-  getCapture(id) { return this.get(`/v2/payments/captures/${id}`) }
-  refundCapture(id, p) { return this.post(`/v2/payments/captures/${id}/refund`, p || {}) }
-  getRefund(id) { return this.get(`/v2/payments/refunds/${id}`) }
+  getAuthorization(id) {
+    return this.get(`/v2/payments/authorizations/${id}`);
+  }
+  captureAuthorization(id, p) {
+    return this.post(`/v2/payments/authorizations/${id}/capture`, p || {});
+  }
+  reauthorize(id, p) {
+    return this.post(`/v2/payments/authorizations/${id}/reauthorize`, p || {});
+  }
+  voidAuthorization(id) {
+    return this.post(`/v2/payments/authorizations/${id}/void`);
+  }
+  getCapture(id) {
+    return this.get(`/v2/payments/captures/${id}`);
+  }
+  refundCapture(id, p) {
+    return this.post(`/v2/payments/captures/${id}/refund`, p || {});
+  }
+  getRefund(id) {
+    return this.get(`/v2/payments/refunds/${id}`);
+  }
 
   // ---------------------------------------------------------------------------
   // Payouts
   // ---------------------------------------------------------------------------
 
-  createPayout(p) { return this.post('/v1/payments/payouts', p) }
-  getPayout(id) { return this.get(`/v1/payments/payouts/${id}`) }
-  getPayoutItem(id) { return this.get(`/v1/payments/payouts-item/${id}`) }
-  cancelPayoutItem(id) { return this.post(`/v1/payments/payouts-item/${id}/cancel`) }
+  createPayout(p) {
+    return this.post("/v1/payments/payouts", p);
+  }
+  getPayout(id) {
+    return this.get(`/v1/payments/payouts/${id}`);
+  }
+  getPayoutItem(id) {
+    return this.get(`/v1/payments/payouts-item/${id}`);
+  }
+  cancelPayoutItem(id) {
+    return this.post(`/v1/payments/payouts-item/${id}/cancel`);
+  }
 
   // ---------------------------------------------------------------------------
   // Billing Plans
   // ---------------------------------------------------------------------------
 
-  createPlan(p) { return this.post('/v1/billing/plans', p) }
-  listPlans(q) { return this.get('/v1/billing/plans', q) }
-  getPlan(id) { return this.get(`/v1/billing/plans/${id}`) }
-  updatePlan(id, p) { return this.patch(`/v1/billing/plans/${id}`, p) }
-  activatePlan(id) { return this.post(`/v1/billing/plans/${id}/activate`) }
-  deactivatePlan(id) { return this.post(`/v1/billing/plans/${id}/deactivate`) }
-  updatePlanPricing(id, p) { return this.post(`/v1/billing/plans/${id}/update-pricing-schemes`, p) }
+  createPlan(p) {
+    return this.post("/v1/billing/plans", p);
+  }
+  listPlans(q) {
+    return this.get("/v1/billing/plans", q);
+  }
+  getPlan(id) {
+    return this.get(`/v1/billing/plans/${id}`);
+  }
+  updatePlan(id, p) {
+    return this.patch(`/v1/billing/plans/${id}`, p);
+  }
+  activatePlan(id) {
+    return this.post(`/v1/billing/plans/${id}/activate`);
+  }
+  deactivatePlan(id) {
+    return this.post(`/v1/billing/plans/${id}/deactivate`);
+  }
+  updatePlanPricing(id, p) {
+    return this.post(`/v1/billing/plans/${id}/update-pricing-schemes`, p);
+  }
 
   // ---------------------------------------------------------------------------
   // Subscriptions
   // ---------------------------------------------------------------------------
 
-  createSubscription(p) { return this.post('/v1/billing/subscriptions', p) }
-  getSubscription(id) { return this.get(`/v1/billing/subscriptions/${id}`) }
-  updateSubscription(id, p) { return this.patch(`/v1/billing/subscriptions/${id}`, p) }
-  reviseSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/revise`, p) }
-  suspendSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/suspend`, p || { reason: 'Suspended via W3 workflow' }) }
-  cancelSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/cancel`, p || { reason: 'Cancelled via W3 workflow' }) }
-  activateSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/activate`, p || { reason: 'Reactivated via W3 workflow' }) }
-  captureSubscription(id, p) { return this.post(`/v1/billing/subscriptions/${id}/capture`, p) }
-  listSubscriptionTransactions(id, q) { return this.get(`/v1/billing/subscriptions/${id}/transactions`, q) }
+  createSubscription(p) {
+    return this.post("/v1/billing/subscriptions", p);
+  }
+  getSubscription(id) {
+    return this.get(`/v1/billing/subscriptions/${id}`);
+  }
+  updateSubscription(id, p) {
+    return this.patch(`/v1/billing/subscriptions/${id}`, p);
+  }
+  reviseSubscription(id, p) {
+    return this.post(`/v1/billing/subscriptions/${id}/revise`, p);
+  }
+  suspendSubscription(id, p) {
+    return this.post(
+      `/v1/billing/subscriptions/${id}/suspend`,
+      p || { reason: "Suspended via W3 workflow" },
+    );
+  }
+  cancelSubscription(id, p) {
+    return this.post(
+      `/v1/billing/subscriptions/${id}/cancel`,
+      p || { reason: "Cancelled via W3 workflow" },
+    );
+  }
+  activateSubscription(id, p) {
+    return this.post(
+      `/v1/billing/subscriptions/${id}/activate`,
+      p || { reason: "Reactivated via W3 workflow" },
+    );
+  }
+  captureSubscription(id, p) {
+    return this.post(`/v1/billing/subscriptions/${id}/capture`, p);
+  }
+  listSubscriptionTransactions(id, q) {
+    return this.get(`/v1/billing/subscriptions/${id}/transactions`, q);
+  }
 
   // ---------------------------------------------------------------------------
   // Invoicing
   // ---------------------------------------------------------------------------
 
-  createInvoice(p) { return this.post('/v2/invoicing/invoices', p) }
-  listInvoices(q) { return this.get('/v2/invoicing/invoices', q) }
-  getInvoice(id) { return this.get(`/v2/invoicing/invoices/${id}`) }
-  updateInvoice(id, p) { return this.put(`/v2/invoicing/invoices/${id}`, p) }
-  deleteInvoice(id) { return this.delete(`/v2/invoicing/invoices/${id}`) }
-  sendInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/send`, p || {}) }
-  remindInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/remind`, p || {}) }
-  cancelInvoice(id, p) { return this.post(`/v2/invoicing/invoices/${id}/cancel`, p || {}) }
-  recordInvoicePayment(id, p) { return this.post(`/v2/invoicing/invoices/${id}/payments`, p) }
-  deleteInvoicePayment(iid, pid) { return this.delete(`/v2/invoicing/invoices/${iid}/payments/${pid}`) }
-  recordInvoiceRefund(id, p) { return this.post(`/v2/invoicing/invoices/${id}/refunds`, p) }
-  generateInvoiceQr(id, p) { return this.post(`/v2/invoicing/invoices/${id}/generate-qr-code`, p || { width: 400, height: 400 }) }
-  generateInvoiceNumber() { return this.post('/v2/invoicing/generate-next-invoice-number', {}) }
-  searchInvoices(p) { return this.post('/v2/invoicing/search-invoices', p) }
-  listInvoiceTemplates(q) { return this.get('/v2/invoicing/templates', q) }
-  createInvoiceTemplate(p) { return this.post('/v2/invoicing/templates', p) }
-  getInvoiceTemplate(id) { return this.get(`/v2/invoicing/templates/${id}`) }
-  updateInvoiceTemplate(id, p) { return this.put(`/v2/invoicing/templates/${id}`, p) }
-  deleteInvoiceTemplate(id) { return this.delete(`/v2/invoicing/templates/${id}`) }
+  createInvoice(p) {
+    return this.post("/v2/invoicing/invoices", p);
+  }
+  listInvoices(q) {
+    return this.get("/v2/invoicing/invoices", q);
+  }
+  getInvoice(id) {
+    return this.get(`/v2/invoicing/invoices/${id}`);
+  }
+  updateInvoice(id, p) {
+    return this.put(`/v2/invoicing/invoices/${id}`, p);
+  }
+  deleteInvoice(id) {
+    return this.delete(`/v2/invoicing/invoices/${id}`);
+  }
+  sendInvoice(id, p) {
+    return this.post(`/v2/invoicing/invoices/${id}/send`, p || {});
+  }
+  remindInvoice(id, p) {
+    return this.post(`/v2/invoicing/invoices/${id}/remind`, p || {});
+  }
+  cancelInvoice(id, p) {
+    return this.post(`/v2/invoicing/invoices/${id}/cancel`, p || {});
+  }
+  recordInvoicePayment(id, p) {
+    return this.post(`/v2/invoicing/invoices/${id}/payments`, p);
+  }
+  deleteInvoicePayment(iid, pid) {
+    return this.delete(`/v2/invoicing/invoices/${iid}/payments/${pid}`);
+  }
+  recordInvoiceRefund(id, p) {
+    return this.post(`/v2/invoicing/invoices/${id}/refunds`, p);
+  }
+  generateInvoiceQr(id, p) {
+    return this.post(
+      `/v2/invoicing/invoices/${id}/generate-qr-code`,
+      p || { width: 400, height: 400 },
+    );
+  }
+  generateInvoiceNumber() {
+    return this.post("/v2/invoicing/generate-next-invoice-number", {});
+  }
+  searchInvoices(p) {
+    return this.post("/v2/invoicing/search-invoices", p);
+  }
+  listInvoiceTemplates(q) {
+    return this.get("/v2/invoicing/templates", q);
+  }
+  createInvoiceTemplate(p) {
+    return this.post("/v2/invoicing/templates", p);
+  }
+  getInvoiceTemplate(id) {
+    return this.get(`/v2/invoicing/templates/${id}`);
+  }
+  updateInvoiceTemplate(id, p) {
+    return this.put(`/v2/invoicing/templates/${id}`, p);
+  }
+  deleteInvoiceTemplate(id) {
+    return this.delete(`/v2/invoicing/templates/${id}`);
+  }
 
   // ---------------------------------------------------------------------------
   // Disputes
   // ---------------------------------------------------------------------------
 
-  listDisputes(q) { return this.get('/v1/customer/disputes', q) }
-  getDispute(id) { return this.get(`/v1/customer/disputes/${id}`) }
-  acceptDisputeClaim(id, p) { return this.post(`/v1/customer/disputes/${id}/accept-claim`, p || {}) }
-  escalateDispute(id, p) { return this.post(`/v1/customer/disputes/${id}/escalate`, p || { note: 'Escalated via W3 workflow' }) }
-  provideDisputeEvidence(id, p) { return this.post(`/v1/customer/disputes/${id}/provide-evidence`, p) }
-  appealDispute(id, p) { return this.post(`/v1/customer/disputes/${id}/appeal`, p) }
-  sendDisputeMessage(id, p) { return this.post(`/v1/customer/disputes/${id}/send-message`, p) }
-  makeDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/make-offer`, p) }
-  acceptDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/accept-offer`, p || {}) }
-  denyDisputeOffer(id, p) { return this.post(`/v1/customer/disputes/${id}/deny-offer`, p || {}) }
+  listDisputes(q) {
+    return this.get("/v1/customer/disputes", q);
+  }
+  getDispute(id) {
+    return this.get(`/v1/customer/disputes/${id}`);
+  }
+  acceptDisputeClaim(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/accept-claim`, p || {});
+  }
+  escalateDispute(id, p) {
+    return this.post(
+      `/v1/customer/disputes/${id}/escalate`,
+      p || { note: "Escalated via W3 workflow" },
+    );
+  }
+  provideDisputeEvidence(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/provide-evidence`, p);
+  }
+  appealDispute(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/appeal`, p);
+  }
+  sendDisputeMessage(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/send-message`, p);
+  }
+  makeDisputeOffer(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/make-offer`, p);
+  }
+  acceptDisputeOffer(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/accept-offer`, p || {});
+  }
+  denyDisputeOffer(id, p) {
+    return this.post(`/v1/customer/disputes/${id}/deny-offer`, p || {});
+  }
 
   // ---------------------------------------------------------------------------
   // Vault / Payment Tokens
   // ---------------------------------------------------------------------------
 
-  createSetupToken(p) { return this.post('/v3/vault/setup-tokens', p) }
-  getSetupToken(id) { return this.get(`/v3/vault/setup-tokens/${id}`) }
-  createPaymentToken(p) { return this.post('/v3/vault/payment-tokens', p) }
-  listPaymentTokens(q) { return this.get('/v3/vault/payment-tokens', q) }
-  getPaymentToken(id) { return this.get(`/v3/vault/payment-tokens/${id}`) }
-  deletePaymentToken(id) { return this.delete(`/v3/vault/payment-tokens/${id}`) }
+  createSetupToken(p) {
+    return this.post("/v3/vault/setup-tokens", p);
+  }
+  getSetupToken(id) {
+    return this.get(`/v3/vault/setup-tokens/${id}`);
+  }
+  createPaymentToken(p) {
+    return this.post("/v3/vault/payment-tokens", p);
+  }
+  listPaymentTokens(q) {
+    return this.get("/v3/vault/payment-tokens", q);
+  }
+  getPaymentToken(id) {
+    return this.get(`/v3/vault/payment-tokens/${id}`);
+  }
+  deletePaymentToken(id) {
+    return this.delete(`/v3/vault/payment-tokens/${id}`);
+  }
 
   // ---------------------------------------------------------------------------
   // Catalog Products
   // ---------------------------------------------------------------------------
 
-  createProduct(p) { return this.post('/v1/catalogs/products', p) }
-  listProducts(q) { return this.get('/v1/catalogs/products', q) }
-  getProduct(id) { return this.get(`/v1/catalogs/products/${id}`) }
-  updateProduct(id, p) { return this.patch(`/v1/catalogs/products/${id}`, p) }
+  createProduct(p) {
+    return this.post("/v1/catalogs/products", p);
+  }
+  listProducts(q) {
+    return this.get("/v1/catalogs/products", q);
+  }
+  getProduct(id) {
+    return this.get(`/v1/catalogs/products/${id}`);
+  }
+  updateProduct(id, p) {
+    return this.patch(`/v1/catalogs/products/${id}`, p);
+  }
 
   // ---------------------------------------------------------------------------
   // Reporting
   // ---------------------------------------------------------------------------
 
-  searchTransactions(q) { return this.get('/v1/reporting/transactions', q) }
-  getBalances(q) { return this.get('/v1/reporting/balances', q) }
+  searchTransactions(q) {
+    return this.get("/v1/reporting/transactions", q);
+  }
+  getBalances(q) {
+    return this.get("/v1/reporting/balances", q);
+  }
 
   // ---------------------------------------------------------------------------
   // Webhooks
   // ---------------------------------------------------------------------------
 
-  createWebhook(p) { return this.post('/v1/notifications/webhooks', p) }
-  listWebhooks() { return this.get('/v1/notifications/webhooks') }
-  getWebhook(id) { return this.get(`/v1/notifications/webhooks/${id}`) }
-  updateWebhook(id, p) { return this.patch(`/v1/notifications/webhooks/${id}`, p) }
-  deleteWebhook(id) { return this.delete(`/v1/notifications/webhooks/${id}`) }
-  listWebhookEventTypes() { return this.get('/v1/notifications/webhooks-event-types') }
-  listWebhookEvents(q) { return this.get('/v1/notifications/webhooks-events', q) }
-  getWebhookEvent(id) { return this.get(`/v1/notifications/webhooks-events/${id}`) }
-  resendWebhookEvent(id, p) { return this.post(`/v1/notifications/webhooks-events/${id}/resend`, p || {}) }
-  simulateWebhookEvent(p) { return this.post('/v1/notifications/simulate-event', p) }
-  verifyWebhookSignature(p) { return this.post('/v1/notifications/verify-webhook-signature', p) }
+  createWebhook(p) {
+    return this.post("/v1/notifications/webhooks", p);
+  }
+  listWebhooks() {
+    return this.get("/v1/notifications/webhooks");
+  }
+  getWebhook(id) {
+    return this.get(`/v1/notifications/webhooks/${id}`);
+  }
+  updateWebhook(id, p) {
+    return this.patch(`/v1/notifications/webhooks/${id}`, p);
+  }
+  deleteWebhook(id) {
+    return this.delete(`/v1/notifications/webhooks/${id}`);
+  }
+  listWebhookEventTypes() {
+    return this.get("/v1/notifications/webhooks-event-types");
+  }
+  listWebhookEvents(q) {
+    return this.get("/v1/notifications/webhooks-events", q);
+  }
+  getWebhookEvent(id) {
+    return this.get(`/v1/notifications/webhooks-events/${id}`);
+  }
+  resendWebhookEvent(id, p) {
+    return this.post(`/v1/notifications/webhooks-events/${id}/resend`, p || {});
+  }
+  simulateWebhookEvent(p) {
+    return this.post("/v1/notifications/simulate-event", p);
+  }
+  verifyWebhookSignature(p) {
+    return this.post("/v1/notifications/verify-webhook-signature", p);
+  }
 
   // ---------------------------------------------------------------------------
   // Crypto Onramp
   // ---------------------------------------------------------------------------
 
-  createOnrampSession(p) { return this.post('/v1/crypto/onramp/sessions', p) }
-  getOnrampSession(id) { return this.get(`/v1/crypto/onramp/sessions/${id}`) }
-  getOnrampQuotes(q) { return this.get('/v1/crypto/onramp/quotes', q) }
+  createOnrampSession(p) {
+    return this.post("/v1/crypto/onramp/sessions", p);
+  }
+  getOnrampSession(id) {
+    return this.get(`/v1/crypto/onramp/sessions/${id}`);
+  }
+  getOnrampQuotes(q) {
+    return this.get("/v1/crypto/onramp/quotes", q);
+  }
 
   // ---------------------------------------------------------------------------
   // Identity
   // ---------------------------------------------------------------------------
 
-  getUserInfo() { return this.get('/v1/identity/oauth2/userinfo', { schema: 'openid' }) }
+  getUserInfo() {
+    return this.get("/v1/identity/oauth2/userinfo", { schema: "openid" });
+  }
 }
 
 ;// CONCATENATED MODULE: ./src/index.js
@@ -28269,157 +28595,539 @@ class PayPalClient {
 
 function getClient() {
   return new PayPalClient({
-    clientId: lib_core.getInput('client-id', { required: true }),
-    clientSecret: lib_core.getInput('client-secret', { required: true }),
-    baseUrl: lib_core.getInput('api-url') || undefined,
-  })
+    clientId: lib_core.getInput("client-id", { required: true }),
+    clientSecret: lib_core.getInput("client-secret", { required: true }),
+    baseUrl: lib_core.getInput("api-url") || undefined,
+  });
 }
 
 function jsonInput(name) {
-  const raw = lib_core.getInput(name)
-  if (!raw) return undefined
+  const raw = lib_core.getInput(name);
+  if (!raw) return undefined;
   try {
-    return JSON.parse(raw)
+    return JSON.parse(raw);
   } catch (e) {
-    throw new error_W3ActionError('INVALID_JSON', `Input '${name}' is not valid JSON: ${e.message}`)
+    throw new error_W3ActionError(
+      "INVALID_JSON",
+      `Input '${name}' is not valid JSON: ${e.message}`,
+    );
   }
 }
 
-function req(name) { return lib_core.getInput(name, { required: true }) }
+function req(name) {
+  return lib_core.getInput(name, { required: true });
+}
 
 /** Build query params from optional inputs.
  *  Accepts [inputName, apiName] tuples for non-standard param names,
  *  or plain strings (kebab → snake_case). */
 function query(...specs) {
-  const q = {}
+  const q = {};
   for (const spec of specs) {
-    const [inputName, apiName] = Array.isArray(spec) ? spec : [spec, spec.replace(/-/g, '_')]
-    const v = lib_core.getInput(inputName)
-    if (v) q[apiName] = v
+    const [inputName, apiName] = Array.isArray(spec)
+      ? spec
+      : [spec, spec.replace(/-/g, "_")];
+    const v = lib_core.getInput(inputName);
+    if (v) q[apiName] = v;
   }
-  return Object.keys(q).length ? q : undefined
+  return Object.keys(q).length ? q : undefined;
 }
 
 const router = createCommandRouter({
   // ── Orders ──────────────────────────────────────────────────────────
-  'create-order': async () => setJsonOutput('result', await getClient().createOrder(jsonInput('body'))),
-  'get-order': async () => setJsonOutput('result', await getClient().getOrder(req('order-id'))),
-  'update-order': async () => setJsonOutput('result', await getClient().updateOrder(req('order-id'), jsonInput('body'))),
-  'authorize-order': async () => setJsonOutput('result', await getClient().authorizeOrder(req('order-id'), jsonInput('body'))),
-  'capture-order': async () => setJsonOutput('result', await getClient().captureOrder(req('order-id'), jsonInput('body'))),
-  'confirm-order': async () => setJsonOutput('result', await getClient().confirmOrder(req('order-id'), jsonInput('body'))),
-  'track-order': async () => setJsonOutput('result', await getClient().trackOrder(req('order-id'), jsonInput('body'))),
-  'update-order-tracking': async () => setJsonOutput('result', await getClient().updateOrderTracking(req('order-id'), req('tracker-id'), jsonInput('body'))),
+  "create-order": async () =>
+    setJsonOutput("result", await getClient().createOrder(jsonInput("body"))),
+  "get-order": async () =>
+    setJsonOutput("result", await getClient().getOrder(req("order-id"))),
+  "update-order": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateOrder(req("order-id"), jsonInput("body")),
+    ),
+  "authorize-order": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().authorizeOrder(req("order-id"), jsonInput("body")),
+    ),
+  "capture-order": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().captureOrder(req("order-id"), jsonInput("body")),
+    ),
+  "confirm-order": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().confirmOrder(req("order-id"), jsonInput("body")),
+    ),
+  "track-order": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().trackOrder(req("order-id"), jsonInput("body")),
+    ),
+  "update-order-tracking": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateOrderTracking(
+        req("order-id"),
+        req("tracker-id"),
+        jsonInput("body"),
+      ),
+    ),
 
   // ── Payments ────────────────────────────────────────────────────────
-  'get-authorization': async () => setJsonOutput('result', await getClient().getAuthorization(req('authorization-id'))),
-  'capture-authorization': async () => setJsonOutput('result', await getClient().captureAuthorization(req('authorization-id'), jsonInput('body'))),
-  'reauthorize': async () => setJsonOutput('result', await getClient().reauthorize(req('authorization-id'), jsonInput('body'))),
-  'void-authorization': async () => setJsonOutput('result', await getClient().voidAuthorization(req('authorization-id'))),
-  'get-capture': async () => setJsonOutput('result', await getClient().getCapture(req('capture-id'))),
-  'refund-capture': async () => setJsonOutput('result', await getClient().refundCapture(req('capture-id'), jsonInput('body'))),
-  'get-refund': async () => setJsonOutput('result', await getClient().getRefund(req('refund-id'))),
+  "get-authorization": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getAuthorization(req("authorization-id")),
+    ),
+  "capture-authorization": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().captureAuthorization(
+        req("authorization-id"),
+        jsonInput("body"),
+      ),
+    ),
+  reauthorize: async () =>
+    setJsonOutput(
+      "result",
+      await getClient().reauthorize(req("authorization-id"), jsonInput("body")),
+    ),
+  "void-authorization": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().voidAuthorization(req("authorization-id")),
+    ),
+  "get-capture": async () =>
+    setJsonOutput("result", await getClient().getCapture(req("capture-id"))),
+  "refund-capture": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().refundCapture(req("capture-id"), jsonInput("body")),
+    ),
+  "get-refund": async () =>
+    setJsonOutput("result", await getClient().getRefund(req("refund-id"))),
 
   // ── Payouts ─────────────────────────────────────────────────────────
-  'create-payout': async () => setJsonOutput('result', await getClient().createPayout(jsonInput('body'))),
-  'get-payout': async () => setJsonOutput('result', await getClient().getPayout(req('payout-id'))),
-  'get-payout-item': async () => setJsonOutput('result', await getClient().getPayoutItem(req('item-id'))),
-  'cancel-payout-item': async () => setJsonOutput('result', await getClient().cancelPayoutItem(req('item-id'))),
+  "create-payout": async () =>
+    setJsonOutput("result", await getClient().createPayout(jsonInput("body"))),
+  "get-payout": async () =>
+    setJsonOutput("result", await getClient().getPayout(req("payout-id"))),
+  "get-payout-item": async () =>
+    setJsonOutput("result", await getClient().getPayoutItem(req("item-id"))),
+  "cancel-payout-item": async () =>
+    setJsonOutput("result", await getClient().cancelPayoutItem(req("item-id"))),
 
   // ── Billing Plans ───────────────────────────────────────────────────
-  'create-plan': async () => setJsonOutput('result', await getClient().createPlan(jsonInput('body'))),
-  'list-plans': async () => setJsonOutput('result', await getClient().listPlans(query('page-size', 'page', 'total-required'))),
-  'get-plan': async () => setJsonOutput('result', await getClient().getPlan(req('plan-id'))),
-  'update-plan': async () => setJsonOutput('result', await getClient().updatePlan(req('plan-id'), jsonInput('body'))),
-  'activate-plan': async () => setJsonOutput('result', await getClient().activatePlan(req('plan-id'))),
-  'deactivate-plan': async () => setJsonOutput('result', await getClient().deactivatePlan(req('plan-id'))),
-  'update-plan-pricing': async () => setJsonOutput('result', await getClient().updatePlanPricing(req('plan-id'), jsonInput('body'))),
+  "create-plan": async () =>
+    setJsonOutput("result", await getClient().createPlan(jsonInput("body"))),
+  "list-plans": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listPlans(query("page-size", "page", "total-required")),
+    ),
+  "get-plan": async () =>
+    setJsonOutput("result", await getClient().getPlan(req("plan-id"))),
+  "update-plan": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updatePlan(req("plan-id"), jsonInput("body")),
+    ),
+  "activate-plan": async () =>
+    setJsonOutput("result", await getClient().activatePlan(req("plan-id"))),
+  "deactivate-plan": async () =>
+    setJsonOutput("result", await getClient().deactivatePlan(req("plan-id"))),
+  "update-plan-pricing": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updatePlanPricing(req("plan-id"), jsonInput("body")),
+    ),
 
   // ── Subscriptions ───────────────────────────────────────────────────
-  'create-subscription': async () => setJsonOutput('result', await getClient().createSubscription(jsonInput('body'))),
-  'get-subscription': async () => setJsonOutput('result', await getClient().getSubscription(req('subscription-id'))),
-  'update-subscription': async () => setJsonOutput('result', await getClient().updateSubscription(req('subscription-id'), jsonInput('body'))),
-  'revise-subscription': async () => setJsonOutput('result', await getClient().reviseSubscription(req('subscription-id'), jsonInput('body'))),
-  'suspend-subscription': async () => setJsonOutput('result', await getClient().suspendSubscription(req('subscription-id'), jsonInput('body'))),
-  'cancel-subscription': async () => setJsonOutput('result', await getClient().cancelSubscription(req('subscription-id'), jsonInput('body'))),
-  'activate-subscription': async () => setJsonOutput('result', await getClient().activateSubscription(req('subscription-id'), jsonInput('body'))),
-  'capture-subscription': async () => setJsonOutput('result', await getClient().captureSubscription(req('subscription-id'), jsonInput('body'))),
-  'list-subscription-transactions': async () => setJsonOutput('result', await getClient().listSubscriptionTransactions(req('subscription-id'), query(['start-date', 'start_time'], ['end-date', 'end_time']))),
+  "create-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().createSubscription(jsonInput("body")),
+    ),
+  "get-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getSubscription(req("subscription-id")),
+    ),
+  "update-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "revise-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().reviseSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "suspend-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().suspendSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "cancel-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().cancelSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "activate-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().activateSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "capture-subscription": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().captureSubscription(
+        req("subscription-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "list-subscription-transactions": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listSubscriptionTransactions(
+        req("subscription-id"),
+        query(["start-date", "start_time"], ["end-date", "end_time"]),
+      ),
+    ),
 
   // ── Invoicing ───────────────────────────────────────────────────────
-  'create-invoice': async () => setJsonOutput('result', await getClient().createInvoice(jsonInput('body'))),
-  'list-invoices': async () => setJsonOutput('result', await getClient().listInvoices(query('page', 'page-size', 'total-required', 'fields'))),
-  'get-invoice': async () => setJsonOutput('result', await getClient().getInvoice(req('invoice-id'))),
-  'update-invoice': async () => setJsonOutput('result', await getClient().updateInvoice(req('invoice-id'), jsonInput('body'))),
-  'delete-invoice': async () => setJsonOutput('result', await getClient().deleteInvoice(req('invoice-id'))),
-  'send-invoice': async () => setJsonOutput('result', await getClient().sendInvoice(req('invoice-id'), jsonInput('body'))),
-  'remind-invoice': async () => setJsonOutput('result', await getClient().remindInvoice(req('invoice-id'), jsonInput('body'))),
-  'cancel-invoice': async () => setJsonOutput('result', await getClient().cancelInvoice(req('invoice-id'), jsonInput('body'))),
-  'record-invoice-payment': async () => setJsonOutput('result', await getClient().recordInvoicePayment(req('invoice-id'), jsonInput('body'))),
-  'delete-invoice-payment': async () => setJsonOutput('result', await getClient().deleteInvoicePayment(req('invoice-id'), req('payment-id'))),
-  'record-invoice-refund': async () => setJsonOutput('result', await getClient().recordInvoiceRefund(req('invoice-id'), jsonInput('body'))),
-  'generate-invoice-qr': async () => setJsonOutput('result', await getClient().generateInvoiceQr(req('invoice-id'), jsonInput('body'))),
-  'generate-invoice-number': async () => setJsonOutput('result', await getClient().generateInvoiceNumber()),
-  'search-invoices': async () => setJsonOutput('result', await getClient().searchInvoices(jsonInput('body'))),
-  'list-invoice-templates': async () => setJsonOutput('result', await getClient().listInvoiceTemplates(query('page', 'page-size', 'fields'))),
-  'create-invoice-template': async () => setJsonOutput('result', await getClient().createInvoiceTemplate(jsonInput('body'))),
-  'get-invoice-template': async () => setJsonOutput('result', await getClient().getInvoiceTemplate(req('template-id'))),
-  'update-invoice-template': async () => setJsonOutput('result', await getClient().updateInvoiceTemplate(req('template-id'), jsonInput('body'))),
-  'delete-invoice-template': async () => setJsonOutput('result', await getClient().deleteInvoiceTemplate(req('template-id'))),
+  "create-invoice": async () =>
+    setJsonOutput("result", await getClient().createInvoice(jsonInput("body"))),
+  "list-invoices": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listInvoices(
+        query("page", "page-size", "total-required", "fields"),
+      ),
+    ),
+  "get-invoice": async () =>
+    setJsonOutput("result", await getClient().getInvoice(req("invoice-id"))),
+  "update-invoice": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateInvoice(req("invoice-id"), jsonInput("body")),
+    ),
+  "delete-invoice": async () =>
+    setJsonOutput("result", await getClient().deleteInvoice(req("invoice-id"))),
+  "send-invoice": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().sendInvoice(req("invoice-id"), jsonInput("body")),
+    ),
+  "remind-invoice": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().remindInvoice(req("invoice-id"), jsonInput("body")),
+    ),
+  "cancel-invoice": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().cancelInvoice(req("invoice-id"), jsonInput("body")),
+    ),
+  "record-invoice-payment": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().recordInvoicePayment(
+        req("invoice-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "delete-invoice-payment": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().deleteInvoicePayment(
+        req("invoice-id"),
+        req("payment-id"),
+      ),
+    ),
+  "record-invoice-refund": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().recordInvoiceRefund(
+        req("invoice-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "generate-invoice-qr": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().generateInvoiceQr(req("invoice-id"), jsonInput("body")),
+    ),
+  "generate-invoice-number": async () =>
+    setJsonOutput("result", await getClient().generateInvoiceNumber()),
+  "search-invoices": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().searchInvoices(jsonInput("body")),
+    ),
+  "list-invoice-templates": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listInvoiceTemplates(
+        query("page", "page-size", "fields"),
+      ),
+    ),
+  "create-invoice-template": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().createInvoiceTemplate(jsonInput("body")),
+    ),
+  "get-invoice-template": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getInvoiceTemplate(req("template-id")),
+    ),
+  "update-invoice-template": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateInvoiceTemplate(
+        req("template-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "delete-invoice-template": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().deleteInvoiceTemplate(req("template-id")),
+    ),
 
   // ── Disputes ────────────────────────────────────────────────────────
-  'list-disputes': async () => setJsonOutput('result', await getClient().listDisputes(query(['start-date', 'start_time'], ['status', 'dispute_state'], 'page-size'))),
-  'get-dispute': async () => setJsonOutput('result', await getClient().getDispute(req('dispute-id'))),
-  'accept-dispute-claim': async () => setJsonOutput('result', await getClient().acceptDisputeClaim(req('dispute-id'), jsonInput('body'))),
-  'escalate-dispute': async () => setJsonOutput('result', await getClient().escalateDispute(req('dispute-id'), jsonInput('body'))),
-  'provide-dispute-evidence': async () => setJsonOutput('result', await getClient().provideDisputeEvidence(req('dispute-id'), jsonInput('body'))),
-  'appeal-dispute': async () => setJsonOutput('result', await getClient().appealDispute(req('dispute-id'), jsonInput('body'))),
-  'send-dispute-message': async () => setJsonOutput('result', await getClient().sendDisputeMessage(req('dispute-id'), jsonInput('body'))),
-  'make-dispute-offer': async () => setJsonOutput('result', await getClient().makeDisputeOffer(req('dispute-id'), jsonInput('body'))),
-  'accept-dispute-offer': async () => setJsonOutput('result', await getClient().acceptDisputeOffer(req('dispute-id'), jsonInput('body'))),
-  'deny-dispute-offer': async () => setJsonOutput('result', await getClient().denyDisputeOffer(req('dispute-id'), jsonInput('body'))),
+  "list-disputes": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listDisputes(
+        query(
+          ["start-date", "start_time"],
+          ["status", "dispute_state"],
+          "page-size",
+        ),
+      ),
+    ),
+  "get-dispute": async () =>
+    setJsonOutput("result", await getClient().getDispute(req("dispute-id"))),
+  "accept-dispute-claim": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().acceptDisputeClaim(
+        req("dispute-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "escalate-dispute": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().escalateDispute(req("dispute-id"), jsonInput("body")),
+    ),
+  "provide-dispute-evidence": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().provideDisputeEvidence(
+        req("dispute-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "appeal-dispute": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().appealDispute(req("dispute-id"), jsonInput("body")),
+    ),
+  "send-dispute-message": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().sendDisputeMessage(
+        req("dispute-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "make-dispute-offer": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().makeDisputeOffer(req("dispute-id"), jsonInput("body")),
+    ),
+  "accept-dispute-offer": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().acceptDisputeOffer(
+        req("dispute-id"),
+        jsonInput("body"),
+      ),
+    ),
+  "deny-dispute-offer": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().denyDisputeOffer(req("dispute-id"), jsonInput("body")),
+    ),
 
   // ── Vault / Payment Tokens ──────────────────────────────────────────
-  'create-setup-token': async () => setJsonOutput('result', await getClient().createSetupToken(jsonInput('body'))),
-  'get-setup-token': async () => setJsonOutput('result', await getClient().getSetupToken(req('token-id'))),
-  'create-payment-token': async () => setJsonOutput('result', await getClient().createPaymentToken(jsonInput('body'))),
-  'list-payment-tokens': async () => setJsonOutput('result', await getClient().listPaymentTokens(query('customer-id'))),
-  'get-payment-token': async () => setJsonOutput('result', await getClient().getPaymentToken(req('token-id'))),
-  'delete-payment-token': async () => setJsonOutput('result', await getClient().deletePaymentToken(req('token-id'))),
+  "create-setup-token": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().createSetupToken(jsonInput("body")),
+    ),
+  "get-setup-token": async () =>
+    setJsonOutput("result", await getClient().getSetupToken(req("token-id"))),
+  "create-payment-token": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().createPaymentToken(jsonInput("body")),
+    ),
+  "list-payment-tokens": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listPaymentTokens(query("customer-id")),
+    ),
+  "get-payment-token": async () =>
+    setJsonOutput("result", await getClient().getPaymentToken(req("token-id"))),
+  "delete-payment-token": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().deletePaymentToken(req("token-id")),
+    ),
 
   // ── Catalog Products ────────────────────────────────────────────────
-  'create-product': async () => setJsonOutput('result', await getClient().createProduct(jsonInput('body'))),
-  'list-products': async () => setJsonOutput('result', await getClient().listProducts(query('page-size', 'page', 'total-required'))),
-  'get-product': async () => setJsonOutput('result', await getClient().getProduct(req('product-id'))),
-  'update-product': async () => setJsonOutput('result', await getClient().updateProduct(req('product-id'), jsonInput('body'))),
+  "create-product": async () =>
+    setJsonOutput("result", await getClient().createProduct(jsonInput("body"))),
+  "list-products": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listProducts(
+        query("page-size", "page", "total-required"),
+      ),
+    ),
+  "get-product": async () =>
+    setJsonOutput("result", await getClient().getProduct(req("product-id"))),
+  "update-product": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateProduct(req("product-id"), jsonInput("body")),
+    ),
 
   // ── Reporting ───────────────────────────────────────────────────────
-  'search-transactions': async () => setJsonOutput('result', await getClient().searchTransactions(
-    query('start-date', 'end-date', 'transaction-id', 'transaction-type', 'transaction-status', 'transaction-amount', 'currency-code', 'page-size', 'page', 'fields'),
-  )),
-  'get-balances': async () => setJsonOutput('result', await getClient().getBalances(query(['balance-date', 'as_of_time'], 'currency-code'))),
+  "search-transactions": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().searchTransactions(
+        query(
+          "start-date",
+          "end-date",
+          "transaction-id",
+          "transaction-type",
+          "transaction-status",
+          "transaction-amount",
+          "currency-code",
+          "page-size",
+          "page",
+          "fields",
+        ),
+      ),
+    ),
+  "get-balances": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getBalances(
+        query(["balance-date", "as_of_time"], "currency-code"),
+      ),
+    ),
 
   // ── Webhooks ────────────────────────────────────────────────────────
-  'create-webhook': async () => setJsonOutput('result', await getClient().createWebhook(jsonInput('body'))),
-  'list-webhooks': async () => setJsonOutput('result', await getClient().listWebhooks()),
-  'get-webhook': async () => setJsonOutput('result', await getClient().getWebhook(req('webhook-id'))),
-  'update-webhook': async () => setJsonOutput('result', await getClient().updateWebhook(req('webhook-id'), jsonInput('body'))),
-  'delete-webhook': async () => setJsonOutput('result', await getClient().deleteWebhook(req('webhook-id'))),
-  'list-webhook-event-types': async () => setJsonOutput('result', await getClient().listWebhookEventTypes()),
-  'list-webhook-events': async () => setJsonOutput('result', await getClient().listWebhookEvents(query(['start-date', 'start_time'], ['end-date', 'end_time'], 'page-size', 'event-type'))),
-  'get-webhook-event': async () => setJsonOutput('result', await getClient().getWebhookEvent(req('event-id'))),
-  'resend-webhook-event': async () => setJsonOutput('result', await getClient().resendWebhookEvent(req('event-id'), jsonInput('body'))),
-  'simulate-webhook-event': async () => setJsonOutput('result', await getClient().simulateWebhookEvent(jsonInput('body'))),
-  'verify-webhook-signature': async () => setJsonOutput('result', await getClient().verifyWebhookSignature(jsonInput('body'))),
+  "create-webhook": async () =>
+    setJsonOutput("result", await getClient().createWebhook(jsonInput("body"))),
+  "list-webhooks": async () =>
+    setJsonOutput("result", await getClient().listWebhooks()),
+  "get-webhook": async () =>
+    setJsonOutput("result", await getClient().getWebhook(req("webhook-id"))),
+  "update-webhook": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().updateWebhook(req("webhook-id"), jsonInput("body")),
+    ),
+  "delete-webhook": async () =>
+    setJsonOutput("result", await getClient().deleteWebhook(req("webhook-id"))),
+  "list-webhook-event-types": async () =>
+    setJsonOutput("result", await getClient().listWebhookEventTypes()),
+  "list-webhook-events": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().listWebhookEvents(
+        query(
+          ["start-date", "start_time"],
+          ["end-date", "end_time"],
+          "page-size",
+          "event-type",
+        ),
+      ),
+    ),
+  "get-webhook-event": async () =>
+    setJsonOutput("result", await getClient().getWebhookEvent(req("event-id"))),
+  "resend-webhook-event": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().resendWebhookEvent(req("event-id"), jsonInput("body")),
+    ),
+  "simulate-webhook-event": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().simulateWebhookEvent(jsonInput("body")),
+    ),
+  "verify-webhook-signature": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().verifyWebhookSignature(jsonInput("body")),
+    ),
 
   // ── Crypto Onramp ───────────────────────────────────────────────────
-  'create-onramp-session': async () => setJsonOutput('result', await getClient().createOnrampSession(jsonInput('body'))),
-  'get-onramp-session': async () => setJsonOutput('result', await getClient().getOnrampSession(req('session-id'))),
-  'get-onramp-quotes': async () => setJsonOutput('result', await getClient().getOnrampQuotes(query('source-currency', 'destination-currency', 'source-amount'))),
+  "create-onramp-session": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().createOnrampSession(jsonInput("body")),
+    ),
+  "get-onramp-session": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getOnrampSession(req("session-id")),
+    ),
+  "get-onramp-quotes": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().getOnrampQuotes(
+        query("source-currency", "destination-currency", "source-amount"),
+      ),
+    ),
 
   // ── Identity ────────────────────────────────────────────────────────
-  'get-userinfo': async () => setJsonOutput('result', await getClient().getUserInfo()),
-})
+  "get-userinfo": async () =>
+    setJsonOutput("result", await getClient().getUserInfo()),
+});
 
-router()
+// Suppress noisy unhandled rejection warnings; the wrapper below
+// catches via handleError, which calls core.setFailed.
+process.on("unhandledRejection", () => {});
+(async () => {
+  try {
+    await router();
+  } catch (error) {
+    handleError(error);
+  }
+})();
 
