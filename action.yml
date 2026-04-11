@@ -1,138 +1,138 @@
-name: 'W3 PayPal Action'
-description: 'PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and reporting for W3 workflows'
-author: 'w3-io'
+name: "W3 PayPal Action"
+description: "PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault, and reporting for W3 workflows"
+author: "w3-io"
 
 inputs:
   command:
-    description: '88 commands across orders, payments, payouts, subscriptions, invoicing, disputes, vault, products, reporting, webhooks, and identity'
+    description: "88 commands across orders, payments, payouts, subscriptions, invoicing, disputes, vault, products, reporting, webhooks, and identity"
     required: true
   client-id:
-    description: 'PayPal OAuth2 Client ID'
+    description: "PayPal OAuth2 Client ID"
     required: true
   client-secret:
-    description: 'PayPal OAuth2 Client Secret'
+    description: "PayPal OAuth2 Client Secret"
     required: true
   api-url:
-    description: 'PayPal API base URL'
+    description: "PayPal API base URL"
     required: false
-    default: 'https://api-m.paypal.com'
+    default: "https://api-m.paypal.com"
   body:
-    description: 'Request body as JSON (for create/update operations)'
+    description: "Request body as JSON (for create/update operations)"
     required: false
-    default: ''
+    default: ""
   order-id:
-    description: 'Order ID'
+    description: "Order ID"
     required: false
   authorization-id:
-    description: 'Authorization ID'
+    description: "Authorization ID"
     required: false
   capture-id:
-    description: 'Capture ID'
+    description: "Capture ID"
     required: false
   refund-id:
-    description: 'Refund ID'
+    description: "Refund ID"
     required: false
   payout-id:
-    description: 'Batch payout ID'
+    description: "Batch payout ID"
     required: false
   item-id:
-    description: 'Payout item ID'
+    description: "Payout item ID"
     required: false
   plan-id:
-    description: 'Billing plan ID'
+    description: "Billing plan ID"
     required: false
   subscription-id:
-    description: 'Subscription ID'
+    description: "Subscription ID"
     required: false
   invoice-id:
-    description: 'Invoice ID'
+    description: "Invoice ID"
     required: false
   template-id:
-    description: 'Invoice template ID'
+    description: "Invoice template ID"
     required: false
   dispute-id:
-    description: 'Dispute ID'
+    description: "Dispute ID"
     required: false
   token-id:
-    description: 'Vault setup or payment token ID'
+    description: "Vault setup or payment token ID"
     required: false
   product-id:
-    description: 'Catalog product ID'
+    description: "Catalog product ID"
     required: false
   tracker-id:
-    description: 'Shipment tracker ID'
+    description: "Shipment tracker ID"
     required: false
   webhook-id:
-    description: 'Webhook ID'
+    description: "Webhook ID"
     required: false
   event-id:
-    description: 'Webhook event ID'
+    description: "Webhook event ID"
     required: false
   transaction-id:
-    description: 'Transaction ID (for reporting)'
+    description: "Transaction ID (for reporting)"
     required: false
   payment-id:
-    description: 'Recorded payment ID (for invoice)'
+    description: "Recorded payment ID (for invoice)"
     required: false
   customer-id:
-    description: 'Customer ID (for vault)'
+    description: "Customer ID (for vault)"
     required: false
   start-date:
-    description: 'Start date (ISO 8601)'
+    description: "Start date (ISO 8601)"
     required: false
   end-date:
-    description: 'End date (ISO 8601)'
+    description: "End date (ISO 8601)"
     required: false
   status:
-    description: 'Status filter'
+    description: "Status filter"
     required: false
   page:
-    description: 'Page number'
+    description: "Page number"
     required: false
   page-size:
-    description: 'Page size'
+    description: "Page size"
     required: false
   total-required:
-    description: 'Include total count in response'
+    description: "Include total count in response"
     required: false
   fields:
-    description: 'Fields filter (for reporting)'
+    description: "Fields filter (for reporting)"
     required: false
   currency-code:
-    description: 'Currency code filter'
+    description: "Currency code filter"
     required: false
   balance-date:
-    description: 'Balance as-of date (ISO 8601)'
+    description: "Balance as-of date (ISO 8601)"
     required: false
   transaction-type:
-    description: 'Transaction type filter'
+    description: "Transaction type filter"
     required: false
   transaction-status:
-    description: 'Transaction status filter'
+    description: "Transaction status filter"
     required: false
   transaction-amount:
-    description: 'Transaction amount filter'
+    description: "Transaction amount filter"
     required: false
   event-type:
-    description: 'Webhook event type filter'
+    description: "Webhook event type filter"
     required: false
   session-id:
-    description: 'Crypto onramp session ID'
+    description: "Crypto onramp session ID"
     required: false
   source-currency:
-    description: 'Source currency for onramp quotes'
+    description: "Source currency for onramp quotes"
     required: false
   destination-currency:
-    description: 'Destination currency for onramp quotes'
+    description: "Destination currency for onramp quotes"
     required: false
   source-amount:
-    description: 'Source amount for onramp quotes'
+    description: "Source amount for onramp quotes"
     required: false
 
 outputs:
   result:
-    description: 'Command result as JSON string'
+    description: "Command result as JSON string"
 
 runs:
-  using: 'node20'
-  main: 'dist/index.js'
+  using: "node20"
+  main: "dist/index.js"
