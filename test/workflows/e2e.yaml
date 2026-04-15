@@ -267,9 +267,9 @@ jobs:
       #           command: generate-invoice-qr
       #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
       #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"width":200,"height":200}'
+      #       #           api-url: https://api-m.sandbox.paypal.com
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
+      #           body: '{"width":200,"height":200}'
 
       - name: Send the invoice
         uses: w3-io/w3-paypal-action@v0
