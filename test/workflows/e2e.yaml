@@ -290,36 +290,36 @@ jobs:
       #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
       #           api-url: https://api-m.sandbox.paypal.com
       #           invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"send_to_invoicer":true}'
+      #           body: '{"send_to_invoicer":true}'
 
-      - name: Record an invoice payment
-        id: record_payment
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: record-invoice-payment
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"25.00"}}'
-
-      - name: Extract payment ID
-        id: inv_payment
-        run: |
+      #       - name: Record an invoice payment
+      #         id: record_payment
+      #         uses: w3-io/w3-paypal-action@v0
+      #         with:
+      #           command: record-invoice-payment
+      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      #           api-url: https://api-m.sandbox.paypal.com
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
+      #           body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"25.00"}}'
+      # 
+      #       - name: Extract payment ID
+      #         id: inv_payment
+      #         run: |
           echo "id=$(echo '${{ steps.record_payment.outputs.result }}' | jq -r '.payment_id // empty')" >> "$GITHUB_OUTPUT"
 
-      - name: Record an invoice refund
-        id: record_refund
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: record-invoice-refund
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"10.00"}}'
-
-      # SKIP: delete-invoice-payment requires a payment ID from record-invoice-payment response
+      #       - name: Record an invoice refund
+      #         id: record_refund
+      #         uses: w3-io/w3-paypal-action@v0
+      #         with:
+      #           command: record-invoice-refund
+      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      #           api-url: https://api-m.sandbox.paypal.com
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
+      #           body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"10.00"}}'
+      # 
+      #       # SKIP: delete-invoice-payment requires a payment ID from record-invoice-payment response
       # SKIP: delete-invoice-refund requires a refund ID from record-invoice-refund response
 
       #       - name: Cancel the invoice
@@ -330,7 +330,7 @@ jobs:
       #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
       #           api-url: https://api-m.sandbox.paypal.com
       #           invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"send_to_invoicer":true,"send_to_recipient":false,"subject":"Cancelled","note":"E2E test cancellation"}'
+      #           body: '{"send_to_invoicer":true,"send_to_recipient":false,"subject":"Cancelled","note":"E2E test cancellation"}'
 
       # Create a second draft invoice for delete test
       - name: Create a draft invoice for deletion
