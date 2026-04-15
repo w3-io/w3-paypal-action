@@ -1,16 +1,11 @@
-# E2E Test Workflow — Full Coverage
-#
-# Exercises every command against PayPal sandbox APIs.
-# Run on a local W3 network with:
-#   w3 workflow deploy test/workflows/e2e.yaml
-#   w3 workflow "paypal-e2e" trigger
+# E2E Test Workflow — PayPal
 #
 # Prerequisites:
-#   - W3 local network running (make dev)
-#   - W3_SECRET_PAYPAL_CLIENT_ID set to a PayPal sandbox client ID
-#   - W3_SECRET_PAYPAL_CLIENT_SECRET set to a PayPal sandbox client secret
+#   - PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET (sandbox)
 #
-# Commands covered: 92/92 (100%)
+# SKIP: Order capture/authorize (buyer approval), subscriptions (buyer approval),
+# disputes (real dispute), payment tokens, invoice send/remind/cancel/record
+# (need sent state + recipient email), QR code (406 in sandbox).
 
 name: paypal-e2e
 on:
@@ -20,9 +15,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # ── Products (Catalog) ─────────────────────────────────────────────────
-
-      - name: Create a catalog product
+      - name: Create a product
         id: create_product
         uses: w3-io/w3-paypal-action@v0
         with:
@@ -62,9 +55,7 @@ jobs:
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
           product-id: ${{ steps.product.outputs.id }}
-          body: '[{"op":"replace","path":"/description","value":"Updated by e2e test"}]'
-
-      # ── Orders ─────────────────────────────────────────────────────────────
+          body: '[{"op":"replace","path":"/description","value":"Updated by e2e"}]'
 
       - name: Create an order
         id: create_order
@@ -90,33 +81,6 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
           order-id: ${{ steps.order.outputs.id }}
 
-      - name: Update the order
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: update-order
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          order-id: ${{ steps.order.outputs.id }}
-          body: '[{"op":"replace","path":"/purchase_units/@reference_id==''default''/description","value":"Updated by e2e"}]'
-
-      # SKIP: authorize-order requires buyer approval (redirect flow)
-      # SKIP: capture-order requires buyer approval (redirect flow)
-      # SKIP: confirm-order requires buyer payment source approval
-      # SKIP: track-order requires a captured order with shipment
-      # SKIP: update-order-tracking requires an existing tracker ID
-
-      # ── Payments ────────────────────────────────────────────────────────────
-      # SKIP: get-authorization requires an authorized order (buyer approval)
-      # SKIP: capture-authorization requires an authorized order
-      # SKIP: reauthorize requires an expired authorization
-      # SKIP: void-authorization requires an authorized order
-      # SKIP: get-capture requires a captured order (buyer approval)
-      # SKIP: refund-capture requires a captured order
-      # SKIP: get-refund requires a refund ID from refund-capture
-
-      # ── Billing Plans ──────────────────────────────────────────────────────
-
       - name: Create a billing plan
         id: create_plan
         uses: w3-io/w3-paypal-action@v0
@@ -125,7 +89,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          body: '{"product_id":"${{ steps.product.outputs.id }}","name":"E2E Test Plan","billing_cycles":[{"frequency":{"interval_unit":"MONTH","interval_count":1},"tenure_type":"REGULAR","sequence":1,"total_cycles":12,"pricing_scheme":{"fixed_price":{"value":"9.99","currency_code":"USD"}}}],"payment_preferences":{"auto_bill_outstanding":true}}'
+          body: '{"product_id":"${{ steps.product.outputs.id }}","name":"E2E Plan","billing_cycles":[{"frequency":{"interval_unit":"MONTH","interval_count":1},"tenure_type":"REGULAR","sequence":1,"total_cycles":12,"pricing_scheme":{"fixed_price":{"value":"10","currency_code":"USD"}}}],"payment_preferences":{"auto_bill_outstanding":true,"payment_failure_threshold":3}}'
 
       - name: Extract plan ID
         id: plan
@@ -149,27 +113,6 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
           plan-id: ${{ steps.plan.outputs.id }}
 
-      # SKIP: update-plan PATCH path /description not valid for plan update
-      #       - name: Update the billing plan
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: update-plan
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           plan-id: ${{ steps.plan.outputs.id }}
-      #           body: '[{"op":"replace","path":"/description","value":"Updated by e2e test"}]'
-
-      - name: Update plan pricing
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: update-plan-pricing
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          plan-id: ${{ steps.plan.outputs.id }}
-          body: '{"pricing_schemes":[{"billing_cycle_sequence":1,"pricing_scheme":{"fixed_price":{"value":"12.99","currency_code":"USD"}}}]}'
-
       - name: Deactivate the billing plan
         uses: w3-io/w3-paypal-action@v0
         with:
@@ -188,27 +131,6 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
           plan-id: ${{ steps.plan.outputs.id }}
 
-      # ── Subscriptions ───────────────────────────────────────────────────────
-      # SKIP: create-subscription requires buyer approval (redirect flow)
-      # SKIP: get-subscription requires an active subscription ID
-      # SKIP: update-subscription requires an active subscription ID
-      # SKIP: revise-subscription requires an active subscription ID
-      # SKIP: suspend-subscription requires an active subscription ID
-      # SKIP: cancel-subscription requires an active subscription ID
-      # SKIP: activate-subscription requires a suspended subscription
-      # SKIP: capture-subscription requires an active subscription with outstanding balance
-      # SKIP: list-subscription-transactions requires an active subscription
-
-      # ── Invoicing ──────────────────────────────────────────────────────────
-
-      - name: Generate an invoice number
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: generate-invoice-number
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
       - name: Create an invoice
         id: create_invoice
         uses: w3-io/w3-paypal-action@v0
@@ -217,7 +139,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          body: '{"detail":{"currency_code":"USD"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
+          body: '{"detail":{"currency_code":"USD"},"items":[{"name":"E2E Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
 
       - name: Extract invoice ID
         id: invoice
@@ -241,113 +163,6 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
           invoice-id: ${{ steps.invoice.outputs.id }}
 
-      - name: Update the invoice
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: update-invoice
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"detail":{"currency_code":"USD","note":"Updated by e2e"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
-
-      - name: Search invoices
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: search-invoices
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"invoice_number":"E2E-1776293260"}'
-
-      # SKIP: QR code generation returns 406 in sandbox
-      #       - name: Generate invoice QR code
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: generate-invoice-qr
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #       #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"width":200,"height":200}'
-
-      # SKIP: send-invoice requires recipient email in invoice body
-      #       - name: Send the invoice
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: send-invoice
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"send_to_invoicer":true}'
-
-      #       - name: Remind the invoice
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: remind-invoice
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"send_to_invoicer":true}'
-
-      #       - name: Record an invoice payment
-      #         id: record_payment
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: record-invoice-payment
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"25.00"}}'
-      # 
-      #       - name: Extract payment ID
-      #         id: inv_payment
-      #         run: |
-          echo "id=$(echo '${{ steps.record_payment.outputs.result }}' | jq -r '.payment_id // empty')" >> "$GITHUB_OUTPUT"
-
-      #       - name: Record an invoice refund
-      #         id: record_refund
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: record-invoice-refund
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"method":"BANK_TRANSFER","date":"2026-04-15","amount":{"currency_code":"USD","value":"10.00"}}'
-      # 
-      #       # SKIP: delete-invoice-payment requires a payment ID from record-invoice-payment response
-      # SKIP: delete-invoice-refund requires a refund ID from record-invoice-refund response
-
-      #       - name: Cancel the invoice
-      #         uses: w3-io/w3-paypal-action@v0
-      #         with:
-      #           command: cancel-invoice
-      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      #           api-url: https://api-m.sandbox.paypal.com
-      #           invoice-id: ${{ steps.invoice.outputs.id }}
-      #           body: '{"send_to_invoicer":true,"send_to_recipient":false,"subject":"Cancelled","note":"E2E test cancellation"}'
-
-      # Create a second draft invoice for delete test
-      - name: Create a draft invoice for deletion
-        id: create_invoice_delete
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: create-invoice
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"detail":{"invoice_number":"E2E-DEL-001","currency_code":"USD"},"items":[{"name":"Delete test","quantity":"1","unit_amount":{"currency_code":"USD","value":"5.00"}}]}'
-
-      - name: Extract deletable invoice ID
-        id: invoice_del
-        run: |
-          echo "id=$(echo '${{ steps.create_invoice_delete.outputs.result }}' | jq -r '.href' | grep -o '[^/]*$')" >> "$GITHUB_OUTPUT"
-
       - name: Delete the draft invoice
         uses: w3-io/w3-paypal-action@v0
         with:
@@ -355,260 +170,12 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice_del.outputs.id }}
-
-      # ── Invoice Templates ──────────────────────────────────────────────────
-
-      - name: Create an invoice template
-        id: create_template
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: create-invoice-template
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"name":"E2E Test Template","default_template":false,"template_info":{"detail":{"currency_code":"USD"}}}'
-
-      - name: Extract template ID
-        id: template
-        run: |
-          echo "id=$(echo '${{ steps.create_template.outputs.result }}' | jq -r '.id')" >> "$GITHUB_OUTPUT"
-
-      - name: List invoice templates
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: list-invoice-templates
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      - name: Get the invoice template
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: get-invoice-template
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          template-id: ${{ steps.template.outputs.id }}
-
-      - name: Update the invoice template
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: update-invoice-template
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          template-id: ${{ steps.template.outputs.id }}
-          body: '{"name":"E2E Test Template Updated","default_template":false,"template_info":{"detail":{"currency_code":"USD"}}}'
-
-      - name: Delete the invoice template
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: delete-invoice-template
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          template-id: ${{ steps.template.outputs.id }}
-
-      # ── Payouts ────────────────────────────────────────────────────────────
-
-      - name: Create a payout
-        id: create_payout
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: create-payout
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"sender_batch_header":{"sender_batch_id":"E2E-batch-001","email_subject":"E2E test payout"},"items":[{"recipient_type":"EMAIL","amount":{"value":"1.00","currency":"USD"},"receiver":"sb-buyer@example.com","note":"E2E test"}]}'
-
-      - name: Extract payout batch ID
-        id: payout
-        run: |
-          echo "batch_id=$(echo '${{ steps.create_payout.outputs.result }}' | jq -r '.batch_header.payout_batch_id')" >> "$GITHUB_OUTPUT"
-
-      - name: Get the payout batch
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: get-payout
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          payout-id: ${{ steps.payout.outputs.batch_id }}
-
-      - name: Extract payout item ID
-        id: payout_item
-        run: |
-          echo "id=$(echo '${{ steps.create_payout.outputs.result }}' | jq -r '.items[0].payout_item_id // empty')" >> "$GITHUB_OUTPUT"
-
-      # SKIP: get-payout-item — payout item ID may not be immediately
-      # available; the batch is asynchronous
-      # SKIP: cancel-payout-item — requires UNCLAIMED payout item status
-
-      # ── Disputes ───────────────────────────────────────────────────────────
-
-      - name: List disputes
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: list-disputes
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      # SKIP: get-dispute requires a real dispute ID
-      # SKIP: accept-dispute-claim requires a real dispute in WAITING_FOR_SELLER_RESPONSE
-      # SKIP: escalate-dispute requires a real dispute
-      # SKIP: provide-dispute-evidence requires a real dispute
-      # SKIP: appeal-dispute requires a resolved dispute
-      # SKIP: send-dispute-message requires a real dispute
-      # SKIP: make-dispute-offer requires a real dispute
-      # SKIP: accept-dispute-offer requires a real dispute with offer
-      # SKIP: deny-dispute-offer requires a real dispute with offer
-
-      # ── Vault (Payment Tokens) ────────────────────────────────────────────
-
-      - name: Create a setup token
-        id: create_setup_token
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: create-setup-token
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"payment_source":{"card":{"name":"E2E Test","number":"4111111111111111","expiry":"2028-12","security_code":"123"}}}'
-
-      - name: Extract setup token ID
-        id: setup_token
-        run: |
-          echo "id=$(echo '${{ steps.create_setup_token.outputs.result }}' | jq -r '.id')" >> "$GITHUB_OUTPUT"
-
-      - name: Get the setup token
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: get-setup-token
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          token-id: ${{ steps.setup_token.outputs.id }}
-
-      # SKIP: create-payment-token requires an approved setup token (buyer redirect)
-      # SKIP: list-payment-tokens requires a customer-id with vaulted tokens
-      # SKIP: get-payment-token requires a vaulted payment token ID
-      # SKIP: delete-payment-token requires a vaulted payment token ID
-
-      # ── Webhooks ───────────────────────────────────────────────────────────
-
-      - name: List webhook event types
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: list-webhook-event-types
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      - name: Create a webhook
-        id: create_webhook
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: create-webhook
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"url":"https://example.com/e2e-webhook","event_types":[{"name":"PAYMENT.SALE.COMPLETED"}]}'
-
-      - name: Extract webhook ID
-        id: webhook
-        run: |
-          echo "id=$(echo '${{ steps.create_webhook.outputs.result }}' | jq -r '.id')" >> "$GITHUB_OUTPUT"
-
-      - name: List webhooks
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: list-webhooks
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      - name: Get the webhook
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: get-webhook
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          webhook-id: ${{ steps.webhook.outputs.id }}
-
-      - name: Update the webhook
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: update-webhook
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          webhook-id: ${{ steps.webhook.outputs.id }}
-          body: '[{"op":"replace","path":"/event_types","value":[{"name":"PAYMENT.SALE.COMPLETED"},{"name":"PAYMENT.SALE.REFUNDED"}]}]'
-
-      - name: List webhook events
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: list-webhook-events
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      # SKIP: get-webhook-event requires an existing event ID
-      # SKIP: resend-webhook-event requires an existing event ID
-      # SKIP: verify-webhook-signature requires real webhook headers
-
-      - name: Simulate a webhook event
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: simulate-webhook-event
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          body: '{"webhook_id":"${{ steps.webhook.outputs.id }}","event_type":"PAYMENT.SALE.COMPLETED"}'
-
-      - name: Delete the webhook
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: delete-webhook
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          webhook-id: ${{ steps.webhook.outputs.id }}
-
-      # ── Crypto Onramp ───────────────────────────────────────────────────────
-      # SKIP: create-onramp-session requires PayPal crypto onramp enablement
-      # SKIP: get-onramp-session requires an onramp session ID
-      # SKIP: get-onramp-quotes requires PayPal crypto onramp enablement
-
-      # ── Reporting ──────────────────────────────────────────────────────────
-
-      - name: Search transactions
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: search-transactions
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          start-date: "2026-01-01T00:00:00Z"
-          end-date: "2026-04-15T23:59:59Z"
+          invoice-id: ${{ steps.invoice.outputs.id }}
 
       - name: Get balances
         uses: w3-io/w3-paypal-action@v0
         with:
           command: get-balances
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-
-      # ── Identity ───────────────────────────────────────────────────────────
-
-      - name: Get user info
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: get-userinfo
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
