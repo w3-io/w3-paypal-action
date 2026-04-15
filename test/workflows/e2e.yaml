@@ -1,0 +1,234 @@
+# E2E Test Workflow
+#
+# Exercises representative commands from each PayPal API group.
+# Run on a local W3 network with:
+#   w3 workflow deploy test/workflows/e2e.yaml
+#   w3 workflow "paypal-e2e" trigger
+#
+# Prerequisites:
+#   - W3 local network running (make dev)
+#   - W3_SECRET_PAYPAL_CLIENT_ID set to a PayPal sandbox client ID
+#   - W3_SECRET_PAYPAL_CLIENT_SECRET set to a PayPal sandbox client secret
+
+name: paypal-e2e
+
+steps:
+  # ── Products (Catalog) ─────────────────────────────────────────────────
+
+  - name: Create a catalog product
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-product
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      body: '{"name":"E2E Test Product","type":"SERVICE","description":"Created by e2e test"}'
+
+  - name: List products
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-products
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  - name: Get the product
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-product
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      product-id: ${{ steps.create-a-catalog-product.outputs.result.id }}
+
+  # ── Orders ─────────────────────────────────────────────────────────────
+
+  - name: Create an order
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-order
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      body: '{"intent":"CAPTURE","purchase_units":[{"amount":{"currency_code":"USD","value":"10.00"},"description":"E2E test order"}]}'
+
+  - name: Get the order
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-order
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      order-id: ${{ steps.create-an-order.outputs.result.id }}
+
+  # ── Billing Plans ──────────────────────────────────────────────────────
+
+  - name: Create a billing plan
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-plan
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      product-id: ${{ steps.create-a-catalog-product.outputs.result.id }}
+      body: '{"name":"E2E Test Plan","billing_cycles":[{"frequency":{"interval_unit":"MONTH","interval_count":1},"tenure_type":"REGULAR","sequence":1,"total_cycles":12,"pricing_scheme":{"fixed_price":{"value":"9.99","currency_code":"USD"}}}],"payment_preferences":{"auto_bill_outstanding":true}}'
+
+  - name: List billing plans
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-plans
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  - name: Get the billing plan
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-plan
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      plan-id: ${{ steps.create-a-billing-plan.outputs.result.id }}
+
+  - name: Deactivate the billing plan
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: deactivate-plan
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      plan-id: ${{ steps.create-a-billing-plan.outputs.result.id }}
+
+  # ── Invoicing ──────────────────────────────────────────────────────────
+
+  - name: Generate an invoice number
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: generate-invoice-number
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  - name: Create an invoice
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-invoice
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      body: '{"detail":{"invoice_number":"E2E-001","currency_code":"USD"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
+
+  - name: List invoices
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-invoices
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  - name: Get the invoice
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-invoice
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      invoice-id: ${{ steps.create-an-invoice.outputs.result.id }}
+
+  - name: Delete the draft invoice
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: delete-invoice
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      invoice-id: ${{ steps.create-an-invoice.outputs.result.id }}
+
+  # ── Invoice Templates ──────────────────────────────────────────────────
+
+  - name: List invoice templates
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-invoice-templates
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  # ── Payouts ────────────────────────────────────────────────────────────
+
+  - name: Create a payout
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-payout
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      body: '{"sender_batch_header":{"sender_batch_id":"E2E-batch-001","email_subject":"E2E test payout"},"items":[{"recipient_type":"EMAIL","amount":{"value":"1.00","currency":"USD"},"receiver":"sb-buyer@example.com","note":"E2E test"}]}'
+
+  - name: Get the payout batch
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-payout
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      payout-id: ${{ steps.create-a-payout.outputs.result.batch_header.payout_batch_id }}
+
+  # ── Disputes ───────────────────────────────────────────────────────────
+
+  - name: List disputes
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-disputes
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  # ── Vault (Payment Tokens) ────────────────────────────────────────────
+
+  - name: Create a setup token
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: create-setup-token
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+      body: '{"payment_source":{"card":{"name":"E2E Test","number":"4111111111111111","expiry":"2028-12","security_code":"123"}}}'
+
+  # ── Webhooks ───────────────────────────────────────────────────────────
+
+  - name: List webhook event types
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-webhook-event-types
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  - name: List webhooks
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: list-webhooks
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  # ── Identity ───────────────────────────────────────────────────────────
+
+  - name: Get user info
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-userinfo
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
+
+  # ── Reporting ──────────────────────────────────────────────────────────
+
+  - name: Get balances
+    uses: w3-io/w3-paypal-action@v0
+    with:
+      command: get-balances
+      client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      api-url: https://api-m.sandbox.paypal.com
