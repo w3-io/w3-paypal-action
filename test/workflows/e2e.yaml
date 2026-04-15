@@ -279,8 +279,8 @@ jobs:
       #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
       #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
       #           api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"send_to_invoicer":true}'
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
+      #           body: '{"send_to_invoicer":true}'
 
       - name: Remind the invoice
         uses: w3-io/w3-paypal-action@v0
