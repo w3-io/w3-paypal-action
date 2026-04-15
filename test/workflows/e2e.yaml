@@ -271,13 +271,14 @@ jobs:
       #           invoice-id: ${{ steps.invoice.outputs.id }}
       #           body: '{"width":200,"height":200}'
 
-      - name: Send the invoice
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: send-invoice
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
+      # SKIP: send-invoice requires recipient email in invoice body
+      #       - name: Send the invoice
+      #         uses: w3-io/w3-paypal-action@v0
+      #         with:
+      #           command: send-invoice
+      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      #           api-url: https://api-m.sandbox.paypal.com
           invoice-id: ${{ steps.invoice.outputs.id }}
           body: '{"send_to_invoicer":true}'
 
