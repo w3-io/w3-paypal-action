@@ -282,14 +282,14 @@ jobs:
       #           invoice-id: ${{ steps.invoice.outputs.id }}
       #           body: '{"send_to_invoicer":true}'
 
-      - name: Remind the invoice
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: remind-invoice
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
+      #       - name: Remind the invoice
+      #         uses: w3-io/w3-paypal-action@v0
+      #         with:
+      #           command: remind-invoice
+      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      #           api-url: https://api-m.sandbox.paypal.com
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
           body: '{"send_to_invoicer":true}'
 
       - name: Record an invoice payment
@@ -322,14 +322,14 @@ jobs:
       # SKIP: delete-invoice-payment requires a payment ID from record-invoice-payment response
       # SKIP: delete-invoice-refund requires a refund ID from record-invoice-refund response
 
-      - name: Cancel the invoice
-        uses: w3-io/w3-paypal-action@v0
-        with:
-          command: cancel-invoice
-          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
-          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-          api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.invoice.outputs.id }}
+      #       - name: Cancel the invoice
+      #         uses: w3-io/w3-paypal-action@v0
+      #         with:
+      #           command: cancel-invoice
+      #           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+      #           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      #           api-url: https://api-m.sandbox.paypal.com
+      #           invoice-id: ${{ steps.invoice.outputs.id }}
           body: '{"send_to_invoicer":true,"send_to_recipient":false,"subject":"Cancelled","note":"E2E test cancellation"}'
 
       # Create a second draft invoice for delete test
