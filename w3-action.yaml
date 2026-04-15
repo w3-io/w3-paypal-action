@@ -1,12 +1,15 @@
 kind: integration
-name: PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault,
+name:
+  PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault,
   and reporting
 version: 0.1.0
 repo: w3-io/w3-paypal-action
 partner: PayPal
-description: PayPal orders, payments, payouts, subscriptions, invoicing, disputes,
+description:
+  PayPal orders, payments, payouts, subscriptions, invoicing, disputes,
   vault, and reporting
-context: "Complete PayPal REST API with automatic OAuth2 token management. 88 commands\
+context:
+  "Complete PayPal REST API with automatic OAuth2 token management. 88 commands\
   \ across the full PayPal platform.\n\nKey automation patterns:\n**Payouts (fully\
   \ automated, no user interaction):** Send money to one or many recipients via email,\
   \ phone, or PayPal ID. Up to 15,000 items per batch. Use for affiliate payments,\
@@ -39,667 +42,676 @@ context: "Complete PayPal REST API with automatic OAuth2 token management. 88 co
   \ sandbox (api-m.sandbox.paypal.com, default) and production (api-m.paypal.com).\
   \ OAuth2 credentials from developer.paypal.com.\n"
 commands:
-- name: create-order
-  description: Create a checkout order. Returns approval URL for customer redirect.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{intent, purchase_units}'
-- name: get-order
-  description: Get order details by ID.
-  inputs:
-    order-id:
-      type: string
-      required: true
-- name: update-order
-  description: Patch an order (add/replace/remove fields).
-  inputs:
-    order-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-      description: JSON Patch array
-- name: authorize-order
-  description: Authorize (hold) payment on an approved order.
-  inputs:
-    order-id:
-      type: string
-      required: true
-- name: capture-order
-  description: Capture payment for an approved order.
-  inputs:
-    order-id:
-      type: string
-      required: true
-- name: confirm-order
-  description: Confirm payment source for an order.
-  inputs:
-    order-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: track-order
-  description: Add tracking info to an order.
-  inputs:
-    order-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: update-order-tracking
-  description: Update existing tracking on an order.
-  inputs:
-    order-id:
-      type: string
-      required: true
-    tracker-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: get-authorization
-  description: Get details of an authorization hold.
-  inputs:
-    authorization-id:
-      type: string
-      required: true
-- name: capture-authorization
-  description: Capture a previously authorized payment.
-  inputs:
-    authorization-id:
-      type: string
-      required: true
-- name: reauthorize
-  description: Reauthorize an expired authorization.
-  inputs:
-    authorization-id:
-      type: string
-      required: true
-- name: void-authorization
-  description: Void (cancel) an authorization hold.
-  inputs:
-    authorization-id:
-      type: string
-      required: true
-- name: get-capture
-  description: Get capture details.
-  inputs:
-    capture-id:
-      type: string
-      required: true
-- name: refund-capture
-  description: Refund a captured payment (full or partial).
-  inputs:
-    capture-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: false
-      description: Optional partial refund amount
-- name: get-refund
-  description: Get refund details.
-  inputs:
-    refund-id:
-      type: string
-      required: true
-- name: create-payout
-  description: Send money to one or many recipients (email, phone, PayPal ID).
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{sender_batch_header, items}'
-- name: get-payout
-  description: Get batch payout status.
-  inputs:
-    payout-id:
-      type: string
-      required: true
-- name: get-payout-item
-  description: Get individual payout item details.
-  inputs:
-    item-id:
-      type: string
-      required: true
-- name: cancel-payout-item
-  description: Cancel an unclaimed payout item.
-  inputs:
-    item-id:
-      type: string
-      required: true
-- name: create-plan
-  description: Create a billing plan for subscriptions.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{product_id, name, billing_cycles}'
-- name: list-plans
-  description: List billing plans with pagination.
-  inputs:
-    page-size:
-      type: number
-      required: false
-    page:
-      type: number
-      required: false
-- name: get-plan
-  description: Get billing plan details.
-  inputs:
-    plan-id:
-      type: string
-      required: true
-- name: update-plan
-  description: Patch a billing plan.
-  inputs:
-    plan-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: activate-plan
-  description: Activate a billing plan.
-  inputs:
-    plan-id:
-      type: string
-      required: true
-- name: deactivate-plan
-  description: Deactivate a billing plan.
-  inputs:
-    plan-id:
-      type: string
-      required: true
-- name: update-plan-pricing
-  description: Update pricing schemes on a billing plan.
-  inputs:
-    plan-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: create-subscription
-  description: Create a subscription. Returns approval URL for customer consent.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{plan_id, subscriber}'
-- name: get-subscription
-  description: Get subscription details.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-- name: update-subscription
-  description: Patch a subscription.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: revise-subscription
-  description: Revise a subscription (plan change, quantity update).
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: suspend-subscription
-  description: Suspend an active subscription.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-- name: cancel-subscription
-  description: Cancel a subscription.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-- name: activate-subscription
-  description: Reactivate a suspended subscription.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-- name: capture-subscription
-  description: Capture an outstanding subscription payment.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: list-subscription-transactions
-  description: List billing transactions for a subscription.
-  inputs:
-    subscription-id:
-      type: string
-      required: true
-    start-date:
-      type: string
-      required: false
-    end-date:
-      type: string
-      required: false
-- name: create-invoice
-  description: Create a draft invoice.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{detail, primary_recipients, items}'
-- name: list-invoices
-  description: List invoices with pagination.
-  inputs:
-    page:
-      type: number
-      required: false
-    page-size:
-      type: number
-      required: false
-- name: get-invoice
-  description: Get invoice details.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: update-invoice
-  description: Full update of a draft invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: delete-invoice
-  description: Delete a draft invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: send-invoice
-  description: Send a draft invoice to the recipient.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: remind-invoice
-  description: Send a reminder for an unpaid invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: cancel-invoice
-  description: Cancel a sent invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: record-invoice-payment
-  description: Record an external payment against an invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: delete-invoice-payment
-  description: Delete a recorded payment from an invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-    payment-id:
-      type: string
-      required: true
-- name: record-invoice-refund
-  description: Record a refund against an invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: generate-invoice-qr
-  description: Generate a QR code for an invoice.
-  inputs:
-    invoice-id:
-      type: string
-      required: true
-- name: generate-invoice-number
-  description: Generate the next invoice number.
-- name: search-invoices
-  description: Search invoices by status, date, recipient, or amount.
-  inputs:
-    body:
-      type: object
-      required: true
-- name: list-invoice-templates
-  description: List invoice templates.
-  inputs:
-    page:
-      type: number
-      required: false
-    page-size:
-      type: number
-      required: false
-- name: create-invoice-template
-  description: Create an invoice template.
-  inputs:
-    body:
-      type: object
-      required: true
-- name: get-invoice-template
-  description: Get an invoice template by ID.
-  inputs:
-    template-id:
-      type: string
-      required: true
-- name: update-invoice-template
-  description: Update an invoice template.
-  inputs:
-    template-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: delete-invoice-template
-  description: Delete an invoice template.
-  inputs:
-    template-id:
-      type: string
-      required: true
-- name: list-disputes
-  description: List payment disputes and chargebacks.
-  inputs:
-    status:
-      type: string
-      required: false
-    start-date:
-      type: string
-      required: false
-    page-size:
-      type: number
-      required: false
-- name: get-dispute
-  description: Get full dispute details.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-- name: accept-dispute-claim
-  description: Accept a dispute claim (concede to buyer).
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-- name: escalate-dispute
-  description: Escalate a dispute to PayPal for resolution.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-- name: provide-dispute-evidence
-  description: Submit evidence to defend against a dispute.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: appeal-dispute
-  description: Appeal a resolved dispute.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: send-dispute-message
-  description: Send a message in a dispute thread.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: make-dispute-offer
-  description: Make a settlement offer on a dispute.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: accept-dispute-offer
-  description: Accept a dispute settlement offer.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-- name: deny-dispute-offer
-  description: Deny a dispute settlement offer.
-  inputs:
-    dispute-id:
-      type: string
-      required: true
-- name: create-setup-token
-  description: Create a setup token to vault a payment method.
-  inputs:
-    body:
-      type: object
-      required: true
-- name: get-setup-token
-  description: Get setup token details.
-  inputs:
-    token-id:
-      type: string
-      required: true
-- name: create-payment-token
-  description: Create a vaulted payment token from a setup token.
-  inputs:
-    body:
-      type: object
-      required: true
-- name: list-payment-tokens
-  description: List vaulted payment tokens for a customer.
-  inputs:
-    customer-id:
-      type: string
-      required: true
-- name: get-payment-token
-  description: Get a vaulted payment token by ID.
-  inputs:
-    token-id:
-      type: string
-      required: true
-- name: delete-payment-token
-  description: Delete a vaulted payment token.
-  inputs:
-    token-id:
-      type: string
-      required: true
-- name: create-product
-  description: Create a catalog product (required before billing plans).
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{name, type, description}'
-- name: list-products
-  description: List catalog products with pagination.
-  inputs:
-    page-size:
-      type: number
-      required: false
-    page:
-      type: number
-      required: false
-- name: get-product
-  description: Get product details.
-  inputs:
-    product-id:
-      type: string
-      required: true
-- name: update-product
-  description: Patch a catalog product.
-  inputs:
-    product-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: search-transactions
-  description: Search transaction history for reporting and reconciliation.
-  inputs:
-    start-date:
-      type: string
-      required: true
-    end-date:
-      type: string
-      required: true
-    fields:
-      type: string
-      required: false
-- name: get-balances
-  description: Get account balance summary.
-  inputs:
-    currency-code:
-      type: string
-      required: false
-- name: create-webhook
-  description: Create a webhook endpoint.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: '{url, event_types}'
-- name: list-webhooks
-  description: List configured webhook endpoints.
-- name: get-webhook
-  description: Get webhook endpoint details.
-  inputs:
-    webhook-id:
-      type: string
-      required: true
-- name: update-webhook
-  description: Update a webhook endpoint.
-  inputs:
-    webhook-id:
-      type: string
-      required: true
-    body:
-      type: object
-      required: true
-- name: delete-webhook
-  description: Delete a webhook endpoint.
-  inputs:
-    webhook-id:
-      type: string
-      required: true
-- name: list-webhook-event-types
-  description: List all available webhook event types.
-- name: list-webhook-events
-  description: List webhook event notifications.
-  inputs:
-    start-date:
-      type: string
-      required: false
-    end-date:
-      type: string
-      required: false
-    event-type:
-      type: string
-      required: false
-- name: get-webhook-event
-  description: Get a specific webhook event.
-  inputs:
-    event-id:
-      type: string
-      required: true
-- name: resend-webhook-event
-  description: Resend a webhook event notification.
-  inputs:
-    event-id:
-      type: string
-      required: true
-- name: simulate-webhook-event
-  description: Simulate a webhook event (sandbox testing).
-  inputs:
-    body:
-      type: object
-      required: true
-- name: verify-webhook-signature
-  description: Verify a webhook event signature.
-  inputs:
-    body:
-      type: object
-      required: true
-- name: get-userinfo
-  description: Get authenticated user profile via OpenID Connect.
-- name: create-onramp-session
-  description: Create a crypto purchase session.
-  inputs:
-    body:
-      type: object
-      required: true
-      description: Session configuration
-  outputs:
-    result:
-      type: object
-      description: Onramp session with redirect URL
-- name: get-onramp-session
-  description: Get onramp session status.
-  inputs:
-    session-id:
-      type: string
-      required: true
-      description: Session ID
-  outputs:
-    result:
-      type: object
-      description: Session status and details
-- name: get-onramp-quotes
-  description: Get crypto purchase quotes.
-  inputs:
-    source-currency:
-      type: string
-      required: false
-      description: Source fiat currency
-    destination-currency:
-      type: string
-      required: false
-      description: Destination crypto currency
-    source-amount:
-      type: string
-      required: false
-      description: Amount in source currency
-  outputs:
-    result:
-      type: object
-      description: Available quotes
+  - name: create-order
+    description: Create a checkout order. Returns approval URL for customer redirect.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{intent, purchase_units}"
+  - name: get-order
+    description: Get order details by ID.
+    inputs:
+      order-id:
+        type: string
+        required: true
+  - name: update-order
+    description: Patch an order (add/replace/remove fields).
+    inputs:
+      order-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+        description: JSON Patch array
+  - name: authorize-order
+    description: Authorize (hold) payment on an approved order.
+    inputs:
+      order-id:
+        type: string
+        required: true
+  - name: capture-order
+    description: Capture payment for an approved order.
+    inputs:
+      order-id:
+        type: string
+        required: true
+  - name: confirm-order
+    description: Confirm payment source for an order.
+    inputs:
+      order-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: track-order
+    description: Add tracking info to an order.
+    inputs:
+      order-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: update-order-tracking
+    description: Update existing tracking on an order.
+    inputs:
+      order-id:
+        type: string
+        required: true
+      tracker-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: get-authorization
+    description: Get details of an authorization hold.
+    inputs:
+      authorization-id:
+        type: string
+        required: true
+  - name: capture-authorization
+    description: Capture a previously authorized payment.
+    inputs:
+      authorization-id:
+        type: string
+        required: true
+  - name: reauthorize
+    description: Reauthorize an expired authorization.
+    inputs:
+      authorization-id:
+        type: string
+        required: true
+  - name: void-authorization
+    description: Void (cancel) an authorization hold.
+    inputs:
+      authorization-id:
+        type: string
+        required: true
+  - name: get-capture
+    description: Get capture details.
+    inputs:
+      capture-id:
+        type: string
+        required: true
+  - name: refund-capture
+    description: Refund a captured payment (full or partial).
+    inputs:
+      capture-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: false
+        description: Optional partial refund amount
+  - name: get-refund
+    description: Get refund details.
+    inputs:
+      refund-id:
+        type: string
+        required: true
+  - name: create-payout
+    description: Send money to one or many recipients (email, phone, PayPal ID).
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{sender_batch_header, items}"
+  - name: get-payout
+    description: Get batch payout status.
+    inputs:
+      payout-id:
+        type: string
+        required: true
+  - name: get-payout-item
+    description: Get individual payout item details.
+    inputs:
+      item-id:
+        type: string
+        required: true
+  - name: cancel-payout-item
+    description: Cancel an unclaimed payout item.
+    inputs:
+      item-id:
+        type: string
+        required: true
+  - name: create-plan
+    description: Create a billing plan for subscriptions.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{product_id, name, billing_cycles}"
+  - name: list-plans
+    description: List billing plans with pagination.
+    inputs:
+      page-size:
+        type: number
+        required: false
+      page:
+        type: number
+        required: false
+  - name: get-plan
+    description: Get billing plan details.
+    inputs:
+      plan-id:
+        type: string
+        required: true
+  - name: update-plan
+    description: Patch a billing plan.
+    inputs:
+      plan-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: activate-plan
+    description: Activate a billing plan.
+    inputs:
+      plan-id:
+        type: string
+        required: true
+  - name: deactivate-plan
+    description: Deactivate a billing plan.
+    inputs:
+      plan-id:
+        type: string
+        required: true
+  - name: update-plan-pricing
+    description: Update pricing schemes on a billing plan.
+    inputs:
+      plan-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: create-subscription
+    description: Create a subscription. Returns approval URL for customer consent.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{plan_id, subscriber}"
+  - name: get-subscription
+    description: Get subscription details.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+  - name: update-subscription
+    description: Patch a subscription.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: revise-subscription
+    description: Revise a subscription (plan change, quantity update).
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: suspend-subscription
+    description: Suspend an active subscription.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+  - name: cancel-subscription
+    description: Cancel a subscription.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+  - name: activate-subscription
+    description: Reactivate a suspended subscription.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+  - name: capture-subscription
+    description: Capture an outstanding subscription payment.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: list-subscription-transactions
+    description: List billing transactions for a subscription.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+      start-date:
+        type: string
+        required: false
+      end-date:
+        type: string
+        required: false
+  - name: create-invoice
+    description: Create a draft invoice.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{detail, primary_recipients, items}"
+  - name: list-invoices
+    description: List invoices with pagination.
+    inputs:
+      page:
+        type: number
+        required: false
+      page-size:
+        type: number
+        required: false
+  - name: get-invoice
+    description: Get invoice details.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: update-invoice
+    description: Full update of a draft invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: delete-invoice
+    description: Delete a draft invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: send-invoice
+    description: Send a draft invoice to the recipient.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: remind-invoice
+    description: Send a reminder for an unpaid invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: cancel-invoice
+    description: Cancel a sent invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: record-invoice-payment
+    description: Record an external payment against an invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: delete-invoice-payment
+    description: Delete a recorded payment from an invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+      payment-id:
+        type: string
+        required: true
+  - name: record-invoice-refund
+    description: Record a refund against an invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: delete-invoice-refund
+    description: Delete a recorded refund from an invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+      refund-id:
+        type: string
+        required: true
+  - name: generate-invoice-qr
+    description: Generate a QR code for an invoice.
+    inputs:
+      invoice-id:
+        type: string
+        required: true
+  - name: generate-invoice-number
+    description: Generate the next invoice number.
+  - name: search-invoices
+    description: Search invoices by status, date, recipient, or amount.
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: list-invoice-templates
+    description: List invoice templates.
+    inputs:
+      page:
+        type: number
+        required: false
+      page-size:
+        type: number
+        required: false
+  - name: create-invoice-template
+    description: Create an invoice template.
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: get-invoice-template
+    description: Get an invoice template by ID.
+    inputs:
+      template-id:
+        type: string
+        required: true
+  - name: update-invoice-template
+    description: Update an invoice template.
+    inputs:
+      template-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: delete-invoice-template
+    description: Delete an invoice template.
+    inputs:
+      template-id:
+        type: string
+        required: true
+  - name: list-disputes
+    description: List payment disputes and chargebacks.
+    inputs:
+      status:
+        type: string
+        required: false
+      start-date:
+        type: string
+        required: false
+      page-size:
+        type: number
+        required: false
+  - name: get-dispute
+    description: Get full dispute details.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+  - name: accept-dispute-claim
+    description: Accept a dispute claim (concede to buyer).
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+  - name: escalate-dispute
+    description: Escalate a dispute to PayPal for resolution.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+  - name: provide-dispute-evidence
+    description: Submit evidence to defend against a dispute.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: appeal-dispute
+    description: Appeal a resolved dispute.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: send-dispute-message
+    description: Send a message in a dispute thread.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: make-dispute-offer
+    description: Make a settlement offer on a dispute.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: accept-dispute-offer
+    description: Accept a dispute settlement offer.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+  - name: deny-dispute-offer
+    description: Deny a dispute settlement offer.
+    inputs:
+      dispute-id:
+        type: string
+        required: true
+  - name: create-setup-token
+    description: Create a setup token to vault a payment method.
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: get-setup-token
+    description: Get setup token details.
+    inputs:
+      token-id:
+        type: string
+        required: true
+  - name: create-payment-token
+    description: Create a vaulted payment token from a setup token.
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: list-payment-tokens
+    description: List vaulted payment tokens for a customer.
+    inputs:
+      customer-id:
+        type: string
+        required: true
+  - name: get-payment-token
+    description: Get a vaulted payment token by ID.
+    inputs:
+      token-id:
+        type: string
+        required: true
+  - name: delete-payment-token
+    description: Delete a vaulted payment token.
+    inputs:
+      token-id:
+        type: string
+        required: true
+  - name: create-product
+    description: Create a catalog product (required before billing plans).
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{name, type, description}"
+  - name: list-products
+    description: List catalog products with pagination.
+    inputs:
+      page-size:
+        type: number
+        required: false
+      page:
+        type: number
+        required: false
+  - name: get-product
+    description: Get product details.
+    inputs:
+      product-id:
+        type: string
+        required: true
+  - name: update-product
+    description: Patch a catalog product.
+    inputs:
+      product-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: search-transactions
+    description: Search transaction history for reporting and reconciliation.
+    inputs:
+      start-date:
+        type: string
+        required: true
+      end-date:
+        type: string
+        required: true
+      fields:
+        type: string
+        required: false
+  - name: get-balances
+    description: Get account balance summary.
+    inputs:
+      currency-code:
+        type: string
+        required: false
+  - name: create-webhook
+    description: Create a webhook endpoint.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{url, event_types}"
+  - name: list-webhooks
+    description: List configured webhook endpoints.
+  - name: get-webhook
+    description: Get webhook endpoint details.
+    inputs:
+      webhook-id:
+        type: string
+        required: true
+  - name: update-webhook
+    description: Update a webhook endpoint.
+    inputs:
+      webhook-id:
+        type: string
+        required: true
+      body:
+        type: object
+        required: true
+  - name: delete-webhook
+    description: Delete a webhook endpoint.
+    inputs:
+      webhook-id:
+        type: string
+        required: true
+  - name: list-webhook-event-types
+    description: List all available webhook event types.
+  - name: list-webhook-events
+    description: List webhook event notifications.
+    inputs:
+      start-date:
+        type: string
+        required: false
+      end-date:
+        type: string
+        required: false
+      event-type:
+        type: string
+        required: false
+  - name: get-webhook-event
+    description: Get a specific webhook event.
+    inputs:
+      event-id:
+        type: string
+        required: true
+  - name: resend-webhook-event
+    description: Resend a webhook event notification.
+    inputs:
+      event-id:
+        type: string
+        required: true
+  - name: simulate-webhook-event
+    description: Simulate a webhook event (sandbox testing).
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: verify-webhook-signature
+    description: Verify a webhook event signature.
+    inputs:
+      body:
+        type: object
+        required: true
+  - name: get-userinfo
+    description: Get authenticated user profile via OpenID Connect.
+  - name: create-onramp-session
+    description: Create a crypto purchase session.
+    inputs:
+      body:
+        type: object
+        required: true
+        description: Session configuration
+    outputs:
+      result:
+        type: object
+        description: Onramp session with redirect URL
+  - name: get-onramp-session
+    description: Get onramp session status.
+    inputs:
+      session-id:
+        type: string
+        required: true
+        description: Session ID
+    outputs:
+      result:
+        type: object
+        description: Session status and details
+  - name: get-onramp-quotes
+    description: Get crypto purchase quotes.
+    inputs:
+      source-currency:
+        type: string
+        required: false
+        description: Source fiat currency
+      destination-currency:
+        type: string
+        required: false
+        description: Destination crypto currency
+      source-amount:
+        type: string
+        required: false
+        description: Amount in source currency
+    outputs:
+      result:
+        type: object
+        description: Available quotes

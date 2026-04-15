@@ -405,6 +405,9 @@ export class PayPalClient {
   recordInvoiceRefund(id, p) {
     return this.post(`/v2/invoicing/invoices/${id}/refunds`, p);
   }
+  deleteInvoiceRefund(iid, rid) {
+    return this.delete(`/v2/invoicing/invoices/${iid}/refunds/${rid}`);
+  }
   generateInvoiceQr(id, p) {
     return this.post(
       `/v2/invoicing/invoices/${id}/generate-qr-code`,

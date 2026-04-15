@@ -1,5 +1,5 @@
 /**
- * W3 PayPal Action — 91 commands across 12 categories.
+ * W3 PayPal Action — 92 commands across 12 categories.
  *
  * Orders, payments, payouts, subscriptions, invoicing, disputes,
  * vault, catalog products, reporting, webhooks, crypto onramp,
@@ -289,6 +289,14 @@ const router = createCommandRouter({
       await getClient().recordInvoiceRefund(
         req("invoice-id"),
         jsonInput("body"),
+      ),
+    ),
+  "delete-invoice-refund": async () =>
+    setJsonOutput(
+      "result",
+      await getClient().deleteInvoiceRefund(
+        req("invoice-id"),
+        req("refund-id"),
       ),
     ),
   "generate-invoice-qr": async () =>
