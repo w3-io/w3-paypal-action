@@ -21,6 +21,7 @@ jobs:
       # ── Products (Catalog) ─────────────────────────────────────────────────
 
       - name: Create a catalog product
+        id: create_product
         uses: w3-io/w3-paypal-action@v0
         with:
           command: create-product
@@ -49,6 +50,7 @@ jobs:
       # ── Orders ─────────────────────────────────────────────────────────────
 
       - name: Create an order
+        id: create_order
         uses: w3-io/w3-paypal-action@v0
         with:
           command: create-order
@@ -69,6 +71,7 @@ jobs:
       # ── Billing Plans ──────────────────────────────────────────────────────
 
       - name: Create a billing plan
+        id: create_plan
         uses: w3-io/w3-paypal-action@v0
         with:
           command: create-plan
@@ -115,6 +118,7 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
 
       - name: Create an invoice
+        id: create_invoice
         uses: w3-io/w3-paypal-action@v0
         with:
           command: create-invoice
@@ -162,6 +166,7 @@ jobs:
       # ── Payouts ────────────────────────────────────────────────────────────
 
       - name: Create a payout
+        id: create_payout
         uses: w3-io/w3-paypal-action@v0
         with:
           command: create-payout
