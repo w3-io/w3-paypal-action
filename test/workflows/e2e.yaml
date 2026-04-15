@@ -98,7 +98,7 @@ jobs:
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
           order-id: ${{ steps.order.outputs.id }}
-          body: '[{"op":"replace","path":"/purchase_units/@reference_id=='\''default'\''/description","value":"Updated by e2e"}]'
+          body: '[{"op":"replace","path":"/purchase_units/@reference_id==''default''/description","value":"Updated by e2e"}]'
 
       # SKIP: authorize-order requires buyer approval (redirect flow)
       # SKIP: capture-order requires buyer approval (redirect flow)
