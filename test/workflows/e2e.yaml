@@ -217,7 +217,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          body: '{"detail":{"invoice_number":"E2E-1776293260","currency_code":"USD"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
+          body: '{"detail":{"currency_code":"USD"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
 
       - name: Extract invoice ID
         id: invoice
@@ -249,7 +249,7 @@ jobs:
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
           invoice-id: ${{ steps.invoice.outputs.id }}
-          body: '{"detail":{"invoice_number":"E2E-1776293260","currency_code":"USD","note":"Updated by e2e"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
+          body: '{"detail":{"currency_code":"USD","note":"Updated by e2e"},"items":[{"name":"E2E Test Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
 
       - name: Search invoices
         uses: w3-io/w3-paypal-action@v0
