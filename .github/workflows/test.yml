@@ -95,7 +95,7 @@ jobs:
 
       - name: Get order
         uses: ./
-        id: get-order
+        id: get_order
         with:
           command: get-order
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
@@ -105,13 +105,13 @@ jobs:
 
       - name: Verify get-order
         run: |
-          echo "${{ steps.get-order.outputs.result }}" | jq -e '.status == "CREATED"'
+          echo "${{ steps.get_order.outputs.result }}" | jq -e '.status == "CREATED"'
 
       # ── List supported blockchains (onramp) ──────────────────────────
 
       - name: List webhook event types
         uses: ./
-        id: event-types
+        id: event_types
         with:
           command: list-webhook-event-types
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
