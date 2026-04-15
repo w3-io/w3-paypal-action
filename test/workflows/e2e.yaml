@@ -44,7 +44,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          product-id: ${{ steps.create-a-catalog-product.outputs.result.id }}
+          product-id: ${{ steps.create_product.outputs.result.id }}
 
       # ── Orders ─────────────────────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          order-id: ${{ steps.create-an-order.outputs.result.id }}
+          order-id: ${{ steps.create_order.outputs.result.id }}
 
       # ── Billing Plans ──────────────────────────────────────────────────────
 
@@ -75,7 +75,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          product-id: ${{ steps.create-a-catalog-product.outputs.result.id }}
+          product-id: ${{ steps.create_product.outputs.result.id }}
           body: '{"name":"E2E Test Plan","billing_cycles":[{"frequency":{"interval_unit":"MONTH","interval_count":1},"tenure_type":"REGULAR","sequence":1,"total_cycles":12,"pricing_scheme":{"fixed_price":{"value":"9.99","currency_code":"USD"}}}],"payment_preferences":{"auto_bill_outstanding":true}}'
 
       - name: List billing plans
@@ -93,7 +93,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          plan-id: ${{ steps.create-a-billing-plan.outputs.result.id }}
+          plan-id: ${{ steps.create_plan.outputs.result.id }}
 
       - name: Deactivate the billing plan
         uses: w3-io/w3-paypal-action@v0
@@ -102,7 +102,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          plan-id: ${{ steps.create-a-billing-plan.outputs.result.id }}
+          plan-id: ${{ steps.create_plan.outputs.result.id }}
 
       # ── Invoicing ──────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.create-an-invoice.outputs.result.id }}
+          invoice-id: ${{ steps.create_invoice.outputs.result.id }}
 
       - name: Delete the draft invoice
         uses: w3-io/w3-paypal-action@v0
@@ -147,7 +147,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          invoice-id: ${{ steps.create-an-invoice.outputs.result.id }}
+          invoice-id: ${{ steps.create_invoice.outputs.result.id }}
 
       # ── Invoice Templates ──────────────────────────────────────────────────
 
@@ -177,7 +177,7 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          payout-id: ${{ steps.create-a-payout.outputs.result.batch_header.payout_batch_id }}
+          payout-id: ${{ steps.create_payout.outputs.result.batch_header.payout_batch_id }}
 
       # ── Disputes ───────────────────────────────────────────────────────────
 
