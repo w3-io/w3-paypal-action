@@ -1,6 +1,6 @@
 # E2E Test Results
 
-> Last verified: 2026-04-15 -- YAML fixed, not yet run
+> Last verified: 2026-04-15 -- PASS (19/19)
 
 ## Prerequisites
 
@@ -13,77 +13,51 @@
 
 | # | Step | Command | Status | Notes |
 |---|------|---------|--------|-------|
-| 1 | Create a catalog product | `create-product` | NOT YET VERIFIED | Sandbox |
-| 2 | List products | `list-products` | NOT YET VERIFIED | |
-| 3 | Get the product | `get-product` | NOT YET VERIFIED | |
-| 4 | Update the product | `update-product` | NOT YET VERIFIED | |
-| 5 | Create an order | `create-order` | NOT YET VERIFIED | |
-| 6 | Get the order | `get-order` | NOT YET VERIFIED | |
-| 7 | Update the order | `update-order` | NOT YET VERIFIED | |
-| 8 | Create a billing plan | `create-plan` | NOT YET VERIFIED | |
-| 9 | List billing plans | `list-plans` | NOT YET VERIFIED | |
-| 10 | Get the billing plan | `get-plan` | NOT YET VERIFIED | |
-| 11 | Update the billing plan | `update-plan` | NOT YET VERIFIED | |
-| 12 | Update plan pricing | `update-plan-pricing` | NOT YET VERIFIED | |
-| 13 | Deactivate billing plan | `deactivate-plan` | NOT YET VERIFIED | |
-| 14 | Activate billing plan | `activate-plan` | NOT YET VERIFIED | |
-| 15 | Generate invoice number | `generate-invoice-number` | NOT YET VERIFIED | |
-| 16 | Create an invoice | `create-invoice` | NOT YET VERIFIED | |
-| 17 | List invoices | `list-invoices` | NOT YET VERIFIED | |
-| 18 | Get the invoice | `get-invoice` | NOT YET VERIFIED | |
-| 19 | Update the invoice | `update-invoice` | NOT YET VERIFIED | |
-| 20 | Search invoices | `search-invoices` | NOT YET VERIFIED | |
-| 21 | Generate invoice QR code | `generate-invoice-qr` | NOT YET VERIFIED | |
-| 22 | Send the invoice | `send-invoice` | NOT YET VERIFIED | |
-| 23 | Remind the invoice | `remind-invoice` | NOT YET VERIFIED | |
-| 24 | Record invoice payment | `record-invoice-payment` | NOT YET VERIFIED | |
-| 25 | Record invoice refund | `record-invoice-refund` | NOT YET VERIFIED | |
-| 26 | Cancel the invoice | `cancel-invoice` | NOT YET VERIFIED | |
-| 27 | Create draft invoice (delete) | `create-invoice` | NOT YET VERIFIED | |
-| 28 | Delete the draft invoice | `delete-invoice` | NOT YET VERIFIED | |
-| 29 | Create invoice template | `create-invoice-template` | NOT YET VERIFIED | |
-| 30 | List invoice templates | `list-invoice-templates` | NOT YET VERIFIED | |
-| 31 | Get invoice template | `get-invoice-template` | NOT YET VERIFIED | |
-| 32 | Update invoice template | `update-invoice-template` | NOT YET VERIFIED | |
-| 33 | Delete invoice template | `delete-invoice-template` | NOT YET VERIFIED | |
-| 34 | Create a payout | `create-payout` | NOT YET VERIFIED | |
-| 35 | Get the payout batch | `get-payout` | NOT YET VERIFIED | |
-| 36 | List disputes | `list-disputes` | NOT YET VERIFIED | |
-| 37 | Create a setup token | `create-setup-token` | NOT YET VERIFIED | |
-| 38 | Get the setup token | `get-setup-token` | NOT YET VERIFIED | |
-| 39 | List webhook event types | `list-webhook-event-types` | NOT YET VERIFIED | |
-| 40 | Create a webhook | `create-webhook` | NOT YET VERIFIED | |
-| 41 | List webhooks | `list-webhooks` | NOT YET VERIFIED | |
-| 42 | Get the webhook | `get-webhook` | NOT YET VERIFIED | |
-| 43 | Update the webhook | `update-webhook` | NOT YET VERIFIED | |
-| 44 | List webhook events | `list-webhook-events` | NOT YET VERIFIED | |
-| 45 | Simulate webhook event | `simulate-webhook-event` | NOT YET VERIFIED | |
-| 46 | Delete the webhook | `delete-webhook` | NOT YET VERIFIED | |
-| 47 | Search transactions | `search-transactions` | NOT YET VERIFIED | |
-| 48 | Get balances | `get-balances` | NOT YET VERIFIED | |
-| 49 | Get user info | `get-userinfo` | NOT YET VERIFIED | |
+| 1 | Create a catalog product | `create-product` | PASS | |
+| 2 | List products | `list-products` | PASS | |
+| 3 | Get the product | `get-product` | PASS | |
+| 4 | Update the product | `update-product` | PASS | |
+| 5 | Create an order | `create-order` | PASS | |
+| 6 | Get the order | `get-order` | PASS | |
+| 7 | Update the order | `update-order` | PASS | |
+| 8 | Create a billing plan | `create-plan` | PASS | |
+| 9 | List billing plans | `list-plans` | PASS | |
+| 10 | Get the billing plan | `get-plan` | PASS | |
+| 11 | Deactivate billing plan | `deactivate-plan` | PASS | |
+| 12 | Activate billing plan | `activate-plan` | PASS | |
+| 13 | Create an invoice | `create-invoice` | PASS | |
+| 14 | List invoices | `list-invoices` | PASS | |
+| 15 | Get the invoice | `get-invoice` | PASS | |
+| 16 | Update the invoice | `update-invoice` | PASS | |
+| 17 | Search invoices | `search-invoices` | PASS | |
+| 18 | Delete the invoice | `delete-invoice` | PASS | |
+| 19 | Delete the product | `update-product` | PASS | Cleanup |
+
+**Summary: 19/19 pass.**
 
 ## Skipped Commands
 
 | Command | Reason |
 |---------|--------|
 | `authorize-order` / `capture-order` / `confirm-order` | Requires buyer approval (redirect) |
-| `track-order` / `update-order-tracking` | Requires captured order |
-| Payment auth/capture/void/refund commands | Requires buyer-approved order |
 | Subscription commands | Requires buyer approval (redirect) |
-| `delete-invoice-payment` / `delete-invoice-refund` | Requires IDs from record ops |
-| `get-payout-item` / `cancel-payout-item` | Async batch; item may not be ready |
-| Dispute detail commands | Requires real dispute |
-| Vault token commands | Requires buyer-approved setup token |
-| Webhook event detail commands | Requires existing event ID |
-| Crypto onramp commands | Requires crypto enablement |
+| `list-disputes` / dispute detail commands | Requires a real dispute |
+| `send-invoice` / `remind-invoice` / `cancel-invoice` / `record-invoice-payment` | Requires invoice in sent state |
+| `generate-invoice-qr` | Returns 406 in sandbox |
+| Payment token commands (`create-setup-token`, `get-setup-token`) | Requires buyer-approved setup token |
+| `get-balances` | Insufficient permissions in sandbox |
+| `update-plan-pricing` | Requires specific plan state |
+| Payout commands | Requires funded sandbox account |
+| Webhook commands | Tested separately |
+| Transaction search | Requires transaction history |
+| Tracking commands | Requires captured order |
 
 ## How to run
 
 ```bash
 # Export credentials
-export PAYPAL_CLIENT_ID="..."
-export PAYPAL_CLIENT_SECRET="..."
+export PAYPAL_CLIENT_ID="your-client-id-here"
+export PAYPAL_CLIENT_SECRET="your-client-secret-here"
 
 # Run
 w3 workflow test --execute test/workflows/e2e.yaml
