@@ -4,8 +4,8 @@
 #   - PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET (sandbox)
 #
 # SKIP: Order capture/authorize (buyer approval), subscriptions (buyer approval),
-# disputes (real dispute), payment tokens, invoice send/remind/cancel/record
-# (need sent state + recipient email), QR code (406 in sandbox).
+# disputes (real dispute), payment tokens, invoice remind/record
+# (need sent state), QR code (406 in sandbox).
 
 name: paypal-e2e
 on:
@@ -139,12 +139,21 @@ jobs:
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
-          body: '{"detail":{"currency_code":"USD"},"items":[{"name":"E2E Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
+          body: '{"detail":{"currency_code":"USD"},"primary_recipients":[{"billing_info":{"email_address":"e2e-test@example.com"}}],"items":[{"name":"E2E Item","quantity":"1","unit_amount":{"currency_code":"USD","value":"25.00"}}]}'
 
       - name: Extract invoice ID
         id: invoice
         run: |
           echo "id=$(echo '${{ steps.create_invoice.outputs.result }}' | jq -r '.href' | grep -o '[^/]*$')" >> "$GITHUB_OUTPUT"
+
+      - name: Send the invoice
+        uses: w3-io/w3-paypal-action@v0
+        with:
+          command: send-invoice
+          client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          api-url: https://api-m.sandbox.paypal.com
+          invoice-id: ${{ steps.invoice.outputs.id }}
 
       - name: List invoices
         uses: w3-io/w3-paypal-action@v0
@@ -163,10 +172,10 @@ jobs:
           api-url: https://api-m.sandbox.paypal.com
           invoice-id: ${{ steps.invoice.outputs.id }}
 
-      - name: Delete the draft invoice
+      - name: Cancel the sent invoice
         uses: w3-io/w3-paypal-action@v0
         with:
-          command: delete-invoice
+          command: cancel-invoice
           client-id: ${{ secrets.PAYPAL_CLIENT_ID }}
           client-secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
           api-url: https://api-m.sandbox.paypal.com
