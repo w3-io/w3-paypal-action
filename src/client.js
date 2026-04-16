@@ -372,8 +372,14 @@ export class PayPalClient {
   // Invoicing
   // ---------------------------------------------------------------------------
 
-  createInvoice(p) {
-    return this.post("/v2/invoicing/invoices", p);
+  async createInvoice(p) {
+    const created = await this.post("/v2/invoicing/invoices", p);
+    // PayPal returns {href, rel, method} — follow the self href to get
+    // the full invoice object so callers don't have to parse the ID.
+    if (created && created.href) {
+      return this.get(created.href);
+    }
+    return created;
   }
   listInvoices(q) {
     return this.get("/v2/invoicing/invoices", q);

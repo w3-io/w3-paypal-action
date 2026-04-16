@@ -281,11 +281,43 @@ describe("PayPalClient: subscriptions", () => {
 // ── Invoicing ──────────────────────────────────────────────────────────
 
 describe("PayPalClient: invoicing", () => {
-  it("createInvoice posts to invoicing API", async () => {
-    mockFetch(mockApi({ body: { href: "/v2/invoicing/invoices/INV-1" } }));
+  it("createInvoice follows HATEOAS href to return full invoice", async () => {
+    mockFetch([
+      { body: { access_token: "tok_test", expires_in: 3600 } },
+      {
+        body: {
+          href: "https://api-m.sandbox.paypal.com/v2/invoicing/invoices/INV-1",
+          rel: "self",
+          method: "GET",
+        },
+      },
+      {
+        body: {
+          id: "INV-1",
+          status: "DRAFT",
+          detail: { invoice_number: "0001" },
+        },
+      },
+    ]);
     const c = makeClient();
-    await c.createInvoice({ detail: {} });
+    const r = await c.createInvoice({ detail: {} });
+    // Should have made 3 calls: OAuth, POST create, GET self href
+    assert.equal(calls.length, 3);
     assert.match(calls[1].url, /\/v2\/invoicing\/invoices$/);
+    assert.equal(calls[1].options.method, "POST");
+    assert.match(calls[2].url, /\/v2\/invoicing\/invoices\/INV-1$/);
+    assert.equal(calls[2].options.method, "GET");
+    // Returns the full invoice, not the href object
+    assert.equal(r.id, "INV-1");
+    assert.equal(r.status, "DRAFT");
+  });
+
+  it("createInvoice returns response as-is when no href", async () => {
+    mockFetch(mockApi({ body: { id: "INV-2", status: "DRAFT" } }));
+    const c = makeClient();
+    const r = await c.createInvoice({ detail: {} });
+    assert.equal(r.id, "INV-2");
+    assert.equal(calls.length, 2);
   });
 
   it("sendInvoice posts to send endpoint", async () => {
@@ -534,6 +566,46 @@ describe("PayPalClient: error handling", () => {
   });
 });
 
+// ── OAuth token acquisition ────────────────────────────────────────────
+
+describe("PayPalClient: OAuth token acquisition", () => {
+  it("sends form-encoded grant_type to token endpoint", async () => {
+    mockFetch(mockApi({ body: { id: "ORD-1" } }));
+    const c = makeClient();
+    await c.getOrder("ORD-1");
+    const tokenCall = calls[0];
+    assert.match(tokenCall.url, /\/v1\/oauth2\/token$/);
+    assert.equal(tokenCall.options.method, "POST");
+    assert.equal(tokenCall.options.body, "grant_type=client_credentials");
+    assert.equal(
+      tokenCall.options.headers["Content-Type"],
+      "application/x-www-form-urlencoded",
+    );
+  });
+
+  it("uses Bearer token from OAuth response for API calls", async () => {
+    mockFetch([
+      { body: { access_token: "my_bearer_token", expires_in: 3600 } },
+      { body: { id: "ORD-1" } },
+    ]);
+    const c = makeClient();
+    await c.getOrder("ORD-1");
+    assert.equal(
+      calls[1].options.headers.Authorization,
+      "Bearer my_bearer_token",
+    );
+  });
+
+  it("throws OAUTH_FAILED when token response has no access_token", async () => {
+    mockFetch([{ body: { error: "invalid_client" } }]);
+    const c = makeClient();
+    await assert.rejects(
+      () => c.getOrder("x"),
+      (err) => err.code === "OAUTH_FAILED",
+    );
+  });
+});
+
 // ── URL construction ───────────────────────────────────────────────────
 
 describe("PayPalClient: URL construction", () => {
@@ -553,5 +625,51 @@ describe("PayPalClient: URL construction", () => {
     const url = calls[1].url;
     assert.ok(!url.includes("page_size"));
     assert.ok(!url.includes("page="));
+  });
+
+  it("prepends baseUrl to relative paths", async () => {
+    mockFetch(mockApi({ body: { id: "ORD-1" } }));
+    const c = makeClient();
+    await c.getOrder("ORD-1");
+    assert.ok(calls[1].url.startsWith("https://api-m.sandbox.paypal.com"));
+  });
+
+  it("constructs correct paths for nested resources", async () => {
+    mockFetch(mockApi({ body: { transactions: [] } }));
+    const c = makeClient();
+    await c.listSubscriptionTransactions("SUB-99", {
+      start_time: "2024-01-01",
+    });
+    assert.match(
+      calls[1].url,
+      /\/v1\/billing\/subscriptions\/SUB-99\/transactions/,
+    );
+  });
+});
+
+// ── 204 No Content handling ───────────────────────────────────────────
+
+describe("PayPalClient: 204 No Content handling", () => {
+  it("returns {success: true} for DELETE 204", async () => {
+    mockFetch(mockApi({ status: 204 }));
+    const c = makeClient();
+    const r = await c.deleteWebhook("WH-1");
+    assert.deepEqual(r, { success: true });
+  });
+
+  it("returns {success: true} for POST 204 (deactivate-plan)", async () => {
+    mockFetch(mockApi({ status: 204 }));
+    const c = makeClient();
+    const r = await c.deactivatePlan("P-1");
+    assert.deepEqual(r, { success: true });
+  });
+
+  it("returns {success: true} for PATCH 204 (update-product)", async () => {
+    mockFetch(mockApi({ status: 204 }));
+    const c = makeClient();
+    const r = await c.updateProduct("PROD-1", [
+      { op: "replace", path: "/description", value: "Updated" },
+    ]);
+    assert.deepEqual(r, { success: true });
   });
 });
