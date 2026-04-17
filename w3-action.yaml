@@ -1,10 +1,8 @@
 kind: integration
-name:
-  PayPal orders, payments, payouts, subscriptions, invoicing, disputes, vault,
-  and reporting
+name: PayPal
 version: 0.1.0
 repo: w3-io/w3-paypal-action
-partner: PayPal
+partner: paypal
 description:
   PayPal orders, payments, payouts, subscriptions, invoicing, disputes,
   vault, and reporting
@@ -30,12 +28,8 @@ context:
   \ React to chargebacks — list disputes, submit evidence, send messages, make/accept/deny\
   \ offers.\n\nPYUSD note: PayPal's stablecoin is a standard ERC-20/SPL token. Use\
   \ the W3 bridge SDK (w3/ethereum or w3/solana syscalls) for PYUSD operations, not\
-  \ this action.\n\n**Coverage:** This registry includes 27 high-value commands for\
-  \ workflow automation. The full action supports 88 commands covering the complete\
-  \ PayPal REST API — including update-order, void-authorization, reauthorize, remind-invoice,\
-  \ update-invoice, suspend-subscription, activate-subscription, revise-subscription,\
-  \ get-payout-item, create/update/delete webhook, and more. See the full command\
-  \ list at https://github.com/w3-io/w3-paypal-action.\n\n**PayPal's own MCP server**\
+  \ this action.\n\n**Coverage:** 92 commands in this registry covering the complete\
+  \ PayPal REST API. See the full command list at https://github.com/w3-io/w3-paypal-action.\n\n**PayPal's own MCP server**\
   \ (github.com/paypal/paypal-mcp-server) provides 30+ tools for direct PayPal API\
   \ access outside of W3 workflows. Use it for ad-hoc API exploration. Use this W3\
   \ action for verified, consensus-backed execution within workflows.\n\nTwo environments:\
@@ -49,12 +43,20 @@ commands:
         type: object
         required: true
         description: "{intent, purchase_units}"
+    outputs:
+      result:
+        type: object
+        description: "{id, status, links (includes approval URL)}"
   - name: get-order
     description: Get order details by ID.
     inputs:
       order-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Order details with status and purchase_units
   - name: update-order
     description: Patch an order (add/replace/remove fields).
     inputs:
@@ -65,18 +67,30 @@ commands:
         type: object
         required: true
         description: JSON Patch array
+    outputs:
+      result:
+        type: object
+        description: Updated order
   - name: authorize-order
     description: Authorize (hold) payment on an approved order.
     inputs:
       order-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, purchase_units with authorization}"
   - name: capture-order
     description: Capture payment for an approved order.
     inputs:
       order-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, purchase_units with capture details}"
   - name: confirm-order
     description: Confirm payment source for an order.
     inputs:
@@ -86,6 +100,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, payment_source}"
   - name: track-order
     description: Add tracking info to an order.
     inputs:
@@ -95,6 +113,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Order with tracking info
   - name: update-order-tracking
     description: Update existing tracking on an order.
     inputs:
@@ -107,36 +129,60 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated tracking info
   - name: get-authorization
     description: Get details of an authorization hold.
     inputs:
       authorization-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount, expiration_time}"
   - name: capture-authorization
     description: Capture a previously authorized payment.
     inputs:
       authorization-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount, final_capture}"
   - name: reauthorize
     description: Reauthorize an expired authorization.
     inputs:
       authorization-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount, expiration_time}"
   - name: void-authorization
     description: Void (cancel) an authorization hold.
     inputs:
       authorization-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: VOIDED}"
   - name: get-capture
     description: Get capture details.
     inputs:
       capture-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount, final_capture}"
   - name: refund-capture
     description: Refund a captured payment (full or partial).
     inputs:
@@ -147,12 +193,20 @@ commands:
         type: object
         required: false
         description: Optional partial refund amount
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount}"
   - name: get-refund
     description: Get refund details.
     inputs:
       refund-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, amount, seller_payable_breakdown}"
   - name: create-payout
     description: Send money to one or many recipients (email, phone, PayPal ID).
     inputs:
@@ -160,24 +214,40 @@ commands:
         type: object
         required: true
         description: "{sender_batch_header, items}"
+    outputs:
+      result:
+        type: object
+        description: "{batch_header: {payout_batch_id, batch_status}, links}"
   - name: get-payout
     description: Get batch payout status.
     inputs:
       payout-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{batch_header, items}"
   - name: get-payout-item
     description: Get individual payout item details.
     inputs:
       item-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{payout_item_id, transaction_status, payout_item}"
   - name: cancel-payout-item
     description: Cancel an unclaimed payout item.
     inputs:
       item-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{payout_item_id, transaction_status: RETURNED}"
   - name: create-plan
     description: Create a billing plan for subscriptions.
     inputs:
@@ -185,6 +255,10 @@ commands:
         type: object
         required: true
         description: "{product_id, name, billing_cycles}"
+    outputs:
+      result:
+        type: object
+        description: "{id, status, billing_cycles, payment_preferences}"
   - name: list-plans
     description: List billing plans with pagination.
     inputs:
@@ -194,12 +268,20 @@ commands:
       page:
         type: number
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{plans, total_items, links}"
   - name: get-plan
     description: Get billing plan details.
     inputs:
       plan-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, billing_cycles, payment_preferences}"
   - name: update-plan
     description: Patch a billing plan.
     inputs:
@@ -209,18 +291,30 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated plan
   - name: activate-plan
     description: Activate a billing plan.
     inputs:
       plan-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: ACTIVE}"
   - name: deactivate-plan
     description: Deactivate a billing plan.
     inputs:
       plan-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: INACTIVE}"
   - name: update-plan-pricing
     description: Update pricing schemes on a billing plan.
     inputs:
@@ -230,6 +324,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated pricing
   - name: create-subscription
     description: Create a subscription. Returns approval URL for customer consent.
     inputs:
@@ -237,12 +335,20 @@ commands:
         type: object
         required: true
         description: "{plan_id, subscriber}"
+    outputs:
+      result:
+        type: object
+        description: "{id, status, links (includes approval URL)}"
   - name: get-subscription
     description: Get subscription details.
     inputs:
       subscription-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, plan_id, status, subscriber, billing_info}"
   - name: update-subscription
     description: Patch a subscription.
     inputs:
@@ -252,6 +358,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated subscription
   - name: revise-subscription
     description: Revise a subscription (plan change, quantity update).
     inputs:
@@ -261,24 +371,40 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{plan_id, plan_overridden, links}"
   - name: suspend-subscription
     description: Suspend an active subscription.
     inputs:
       subscription-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: SUSPENDED}"
   - name: cancel-subscription
     description: Cancel a subscription.
     inputs:
       subscription-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: CANCELLED}"
   - name: activate-subscription
     description: Reactivate a suspended subscription.
     inputs:
       subscription-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: ACTIVE}"
   - name: capture-subscription
     description: Capture an outstanding subscription payment.
     inputs:
@@ -288,6 +414,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status, amount, time}"
   - name: list-subscription-transactions
     description: List billing transactions for a subscription.
     inputs:
@@ -300,6 +430,10 @@ commands:
       end-date:
         type: string
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{transactions, total_items}"
   - name: create-invoice
     description: Create a draft invoice.
     inputs:
@@ -307,6 +441,10 @@ commands:
         type: object
         required: true
         description: "{detail, primary_recipients, items}"
+    outputs:
+      result:
+        type: object
+        description: "{id, status: DRAFT, detail}"
   - name: list-invoices
     description: List invoices with pagination.
     inputs:
@@ -316,12 +454,20 @@ commands:
       page-size:
         type: number
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{items, total_items, links}"
   - name: get-invoice
     description: Get invoice details.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, detail, primary_recipients, items}"
   - name: update-invoice
     description: Full update of a draft invoice.
     inputs:
@@ -331,30 +477,50 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated invoice
   - name: delete-invoice
     description: Delete a draft invoice.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: deleted}"
   - name: send-invoice
     description: Send a draft invoice to the recipient.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: SENT}"
   - name: remind-invoice
     description: Send a reminder for an unpaid invoice.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Reminder sent confirmation
   - name: cancel-invoice
     description: Cancel a sent invoice.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{status: CANCELLED}"
   - name: record-invoice-payment
     description: Record an external payment against an invoice.
     inputs:
@@ -364,6 +530,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Payment recorded
   - name: delete-invoice-payment
     description: Delete a recorded payment from an invoice.
     inputs:
@@ -373,6 +543,10 @@ commands:
       payment-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Payment record deleted
   - name: record-invoice-refund
     description: Record a refund against an invoice.
     inputs:
@@ -382,6 +556,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Refund recorded
   - name: delete-invoice-refund
     description: Delete a recorded refund from an invoice.
     inputs:
@@ -391,20 +569,36 @@ commands:
       refund-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Refund record deleted
   - name: generate-invoice-qr
     description: Generate a QR code for an invoice.
     inputs:
       invoice-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: QR code image data
   - name: generate-invoice-number
     description: Generate the next invoice number.
+    outputs:
+      result:
+        type: object
+        description: "{invoice_number}"
   - name: search-invoices
     description: Search invoices by status, date, recipient, or amount.
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{items, total_items}"
   - name: list-invoice-templates
     description: List invoice templates.
     inputs:
@@ -414,18 +608,30 @@ commands:
       page-size:
         type: number
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{templates, links}"
   - name: create-invoice-template
     description: Create an invoice template.
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, name, template_info}"
   - name: get-invoice-template
     description: Get an invoice template by ID.
     inputs:
       template-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, name, template_info}"
   - name: update-invoice-template
     description: Update an invoice template.
     inputs:
@@ -435,12 +641,20 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated template
   - name: delete-invoice-template
     description: Delete an invoice template.
     inputs:
       template-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Template deleted
   - name: list-disputes
     description: List payment disputes and chargebacks.
     inputs:
@@ -453,24 +667,40 @@ commands:
       page-size:
         type: number
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{items, total_items}"
   - name: get-dispute
     description: Get full dispute details.
     inputs:
       dispute-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{dispute_id, reason, status, dispute_amount, messages}"
   - name: accept-dispute-claim
     description: Accept a dispute claim (concede to buyer).
     inputs:
       dispute-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Claim accepted
   - name: escalate-dispute
     description: Escalate a dispute to PayPal for resolution.
     inputs:
       dispute-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Dispute escalated to PayPal
   - name: provide-dispute-evidence
     description: Submit evidence to defend against a dispute.
     inputs:
@@ -480,6 +710,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Evidence submitted
   - name: appeal-dispute
     description: Appeal a resolved dispute.
     inputs:
@@ -489,6 +723,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Appeal submitted
   - name: send-dispute-message
     description: Send a message in a dispute thread.
     inputs:
@@ -498,6 +736,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Message sent
   - name: make-dispute-offer
     description: Make a settlement offer on a dispute.
     inputs:
@@ -507,54 +749,90 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Offer submitted
   - name: accept-dispute-offer
     description: Accept a dispute settlement offer.
     inputs:
       dispute-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Offer accepted
   - name: deny-dispute-offer
     description: Deny a dispute settlement offer.
     inputs:
       dispute-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Offer denied
   - name: create-setup-token
     description: Create a setup token to vault a payment method.
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, customer, payment_source}"
   - name: get-setup-token
     description: Get setup token details.
     inputs:
       token-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, status, customer, payment_source}"
   - name: create-payment-token
     description: Create a vaulted payment token from a setup token.
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, customer, payment_source}"
   - name: list-payment-tokens
     description: List vaulted payment tokens for a customer.
     inputs:
       customer-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{payment_tokens, total_items}"
   - name: get-payment-token
     description: Get a vaulted payment token by ID.
     inputs:
       token-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, customer, payment_source}"
   - name: delete-payment-token
     description: Delete a vaulted payment token.
     inputs:
       token-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Token deleted
   - name: create-product
     description: Create a catalog product (required before billing plans).
     inputs:
@@ -562,6 +840,10 @@ commands:
         type: object
         required: true
         description: "{name, type, description}"
+    outputs:
+      result:
+        type: object
+        description: "{id, name, type, create_time}"
   - name: list-products
     description: List catalog products with pagination.
     inputs:
@@ -571,12 +853,20 @@ commands:
       page:
         type: number
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{products, total_items, links}"
   - name: get-product
     description: Get product details.
     inputs:
       product-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, name, type, description}"
   - name: update-product
     description: Patch a catalog product.
     inputs:
@@ -586,6 +876,10 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated product
   - name: search-transactions
     description: Search transaction history for reporting and reconciliation.
     inputs:
@@ -598,12 +892,20 @@ commands:
       fields:
         type: string
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{transaction_details, total_items}"
   - name: get-balances
     description: Get account balance summary.
     inputs:
       currency-code:
         type: string
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{balances: [{currency, total_balance, available_balance}]}"
   - name: create-webhook
     description: Create a webhook endpoint.
     inputs:
@@ -611,14 +913,26 @@ commands:
         type: object
         required: true
         description: "{url, event_types}"
+    outputs:
+      result:
+        type: object
+        description: "{id, url, event_types}"
   - name: list-webhooks
     description: List configured webhook endpoints.
+    outputs:
+      result:
+        type: object
+        description: "{webhooks}"
   - name: get-webhook
     description: Get webhook endpoint details.
     inputs:
       webhook-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, url, event_types}"
   - name: update-webhook
     description: Update a webhook endpoint.
     inputs:
@@ -628,14 +942,26 @@ commands:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Updated webhook
   - name: delete-webhook
     description: Delete a webhook endpoint.
     inputs:
       webhook-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Webhook deleted
   - name: list-webhook-event-types
     description: List all available webhook event types.
+    outputs:
+      result:
+        type: object
+        description: "{event_types}"
   - name: list-webhook-events
     description: List webhook event notifications.
     inputs:
@@ -648,32 +974,56 @@ commands:
       event-type:
         type: string
         required: false
+    outputs:
+      result:
+        type: object
+        description: "{events, count, links}"
   - name: get-webhook-event
     description: Get a specific webhook event.
     inputs:
       event-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{id, event_type, resource, create_time}"
   - name: resend-webhook-event
     description: Resend a webhook event notification.
     inputs:
       event-id:
         type: string
         required: true
+    outputs:
+      result:
+        type: object
+        description: Event resent
   - name: simulate-webhook-event
     description: Simulate a webhook event (sandbox testing).
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: Simulated event
   - name: verify-webhook-signature
     description: Verify a webhook event signature.
     inputs:
       body:
         type: object
         required: true
+    outputs:
+      result:
+        type: object
+        description: "{verification_status}"
   - name: get-userinfo
     description: Get authenticated user profile via OpenID Connect.
+    outputs:
+      result:
+        type: object
+        description: "{user_id, name, email, address}"
   - name: create-onramp-session
     description: Create a crypto purchase session.
     inputs:
