@@ -585,6 +585,7 @@ commands:
         description: QR code image data
   - name: generate-invoice-number
     description: Generate the next invoice number.
+    inputs: {}
     outputs:
       result:
         type: object
@@ -919,6 +920,7 @@ commands:
         description: "{id, url, event_types}"
   - name: list-webhooks
     description: List configured webhook endpoints.
+    inputs: {}
     outputs:
       result:
         type: object
@@ -958,6 +960,7 @@ commands:
         description: Webhook deleted
   - name: list-webhook-event-types
     description: List all available webhook event types.
+    inputs: {}
     outputs:
       result:
         type: object
@@ -1020,6 +1023,7 @@ commands:
         description: "{verification_status}"
   - name: get-userinfo
     description: Get authenticated user profile via OpenID Connect.
+    inputs: {}
     outputs:
       result:
         type: object
